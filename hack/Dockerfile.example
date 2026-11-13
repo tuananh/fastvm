@@ -1,0 +1,23 @@
+# Example Dockerfile for fastvm.
+#
+# fastvm turns this into a bootable, content-addressed ext4 base disk (the
+# guest kernel is supplied by fastvm, not the image). The image has no default
+# entrypoint: the workload is whatever you pass after `--` to `fastvm run`.
+#
+# Build it with the daemon running (see docs/GETTING_STARTED.md):
+#
+#   make image
+#   # or directly:
+#   bin/fastvm -socket /run/fastvm/fastvm.sock image build -f hack/Dockerfile.example \
+#     -t demo:latest hack
+#
+# busybox:latest is tiny (fits comfortably in the default 8 GiB sparse disk)
+# and gives a POSIX shell plus the tools used by the demo (httpd, nc, ps, ...).
+FROM busybox:latest
+
+RUN echo "hello from fastvm" > /etc/motd
+
+# Not used by fastvm, but documents the port the demo publishes (8080:80).
+EXPOSE 80
+
+CMD ["/bin/sh"]

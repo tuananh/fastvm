@@ -1,0 +1,18 @@
+# Build artifacts
+/bin/
+/dist/
+*.test
+*.out
+coverage.*
+
+# Runtime state and test assets
+.cache/
+/assets/
+test/e2e/assets/
+/tmp/
+*.log
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

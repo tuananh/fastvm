@@ -1,0 +1,69 @@
+# fastvm demo configuration.
+#
+# Used by `make start` and the walkthrough in docs/GETTING_STARTED.md. It keeps
+# all state under /tmp so trying fastvm needs no system-wide installation; for a
+# real deployment copy this to /etc/fastvm/config.yaml and point
+# data_dir/kernel_path/agent_path at /var/lib/fastvm/....
+#
+# hack/demo-wake.sh derives a shortened copy of this file (idle 3s / pause 2s /
+# offload 8s) so the auto-sleep wake demo stays quick.
+#
+# Relative paths are resolved from the daemon's working directory, so run
+# fastvmd from the repository root:
+#   sudo bin/fastvmd -config hack/config.yaml
+#
+# The daemon needs root or CAP_NET_ADMIN (TAP/bridge/nftables) and, for the
+# eBPF switch, CAP_BPF; without CAP_BPF it automatically falls back to the
+# Linux bridge.
+
+data_dir: /tmp/fastvm-cow/data
+socket_path: /run/fastvm/fastvm.sock
+kernel_path: test/e2e/assets/vmlinux.bin
+agent_path: bin/fastvm-agent
+
+lifecycle:
+  # Generous windows: a coding-agent VM should not pause after a few seconds of
+  # idle. Shorten them in your own config if you want faster auto-sleep.
+  idle_window: 60s
+  pause_after: 10m
+  offload_after: 30m
+  destroy_after: 0s
+  on_workload_exit: idle
+
+idle:
+  cpu_threshold_pct: 1.0
+  cpu_wake_pct: 5.0
+  sample_interval: 1s
+  exit_hold: 3s
+  warmup: 1s
+  block_io_bytes: 65536
+  keepalive_aware: true
+
+memory:
+  offload_mode: file
+
+wake:
+  tcp: true
+  udp: true
+  icmp: true
+  max_wakes_per_minute: 6
+  coalesce_window: 100ms
+
+volume:
+  cow: reflink
+  size_gb: 8
+  discard_on_destroy: true
+
+switch:
+  # eBPF is the default data plane. Without CAP_BPF/BTF (or when the verifier
+  # rejects the program) fastvmd automatically falls back to the Linux bridge
+  # + AF_PACKET wake path.
+  mode: ebpf
+  isolate_sandboxes: true
+  wake_notify: true
+
+network:
+  # Empty dns/search mirrors the host's /etc/resolv.conf (loopback resolvers
+  # are filtered, with public fallback), like Docker. Override to pin resolvers.
+  dns: []
+  search: []
