@@ -38,7 +38,7 @@ snapshots, images, and volumes.
 > ```sh
 > # Execute commands
 > fastvmctl exec app -- python -c "import this"
-> fastvmctl exec app -- curl https://example.com
+> fastvmctl exec app -- python -c "import urllib.request; print(urllib.request.urlopen('https://example.com').status)"
 > ```
 >
 > ```sh
@@ -46,6 +46,7 @@ snapshots, images, and volumes.
 > fastvmctl snapshot app --name app-snap
 > fastvmctl run --from-snapshot app-snap --name app2
 > fastvmctl exec app2 -- python -c "print('An independent copy!')"
+> fastvmctl snapshot rm app-snap
 > ```
 >
 > ```sh
@@ -53,7 +54,7 @@ snapshots, images, and volumes.
 > fastvmctl ps
 > fastvmctl pause app --deep
 > fastvmctl resume app
-> fastvmctl rm app
+> fastvmctl rm app app2
 > ```
 
 #### <img height="14" src="https://octicons-col.vercel.app/cache/A770EF">&nbsp;&nbsp;Image Management
@@ -84,13 +85,17 @@ snapshots, images, and volumes.
 
 > ```sh
 > # Writable block volume at /data
-> fastvmctl run --image alpine --volume size=8GiB,mount=/data
+> fastvmctl run --image alpine --volume size=8GiB,mount=/data -- df -h /data
 >
 > # Host-directory share
-> fastvmctl run --image alpine --volume /tmp/share:/mnt/share:ro
+> mkdir -p /tmp/share && echo hello >/tmp/share/hello.txt
+> fastvmctl run --image alpine --volume /tmp/share:/mnt/share:ro -- cat /mnt/share/hello.txt
 >
-> # Publish a guest port
-> fastvmctl run --net --image alpine --publish 8080:80
+> # Publish a guest port and clean up
+> fastvmctl run -d --net --image python:3-alpine --name web \
+>   --publish 8080:8000 -- python3 -m http.server 8000 --bind 0.0.0.0
+> curl http://127.0.0.1:8080
+> fastvmctl rm web
 > ```
 
 #### <img height="14" src="https://octicons-col.vercel.app/globe/A770EF">&nbsp;&nbsp;Network Controls
