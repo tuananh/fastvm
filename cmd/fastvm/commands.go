@@ -290,10 +290,10 @@ ext4 template and disable automatic sleep and snapshots.`,
 				if !changed("workdir") {
 					workdir = spec.Workdir
 				}
-				if !changed("vcpus") {
+				if !changed("vcpus") && spec.VCPUs > 0 {
 					vcpus = spec.VCPUs
 				}
-				if !changed("memory") {
+				if !changed("memory") && spec.MemoryMB > 0 {
 					memory = spec.MemoryMB
 				}
 				if changed("publish") {
@@ -441,8 +441,8 @@ ext4 template and disable automatic sleep and snapshots.`,
 	f.StringVarP(&workdir, "workdir", "w", "", "guest working directory")
 	f.StringVar(&image, "image", "", "OCI image or base disk tag/digest")
 	f.StringVar(&name, "name", "", "sandbox name or ID (boot it if no image/file is given)")
-	f.IntVar(&vcpus, "vcpus", 0, "vCPUs (0 = default)")
-	f.IntVar(&memory, "memory", 0, "memory MiB (0 = default)")
+	f.IntVar(&vcpus, "vcpus", 1, "vCPUs")
+	f.IntVar(&memory, "memory", 128, "memory MiB")
 	f.StringArrayVar(&publishes, "publish", nil, "publish a port host:guest[/tcp|udp]")
 	f.StringArrayVar(&envs, "env", nil, "workload env K=V")
 	f.StringArrayVarP(&volumes, "volume", "v", nil, "mount a host directory (host[:guest][:ro]) or data volume (size=8GiB,mount=/data)")

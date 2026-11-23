@@ -16,6 +16,14 @@ export function MiniUsageGraph({ percent, label, className }: MiniUsageGraphProp
   const history = useUsageHistory(clamped);
   const color = usageColor(clamped);
 
+  if (history.length === 0) {
+    return (
+      <span className="inline-flex h-6 items-center text-xs text-gray-400 dark:text-gray-500">
+        —
+      </span>
+    );
+  }
+
   return (
     <div
       role="progressbar"

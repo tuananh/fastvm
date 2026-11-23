@@ -230,16 +230,33 @@ export function VmDetailDrawer({
               statsData.vcpus === 1 ? "" : "s"
             }`}
           />
-          <UtilizationBar
-            label="Memory (guest)"
-            percent={memoryPercent}
-            showHistory
-            detail={
-              hasGuestMemory
-                ? `${formatBytes(guestMemoryUsed)} / ${formatBytes(guestMemoryTotal ?? memoryLimitBytes)} used`
-                : "Guest memory stats unavailable; rebuild the image with the current agent."
-            }
-          />
+          {hasGuestMemory ? (
+            <UtilizationBar
+              label="Memory (guest)"
+              percent={memoryPercent}
+              showHistory
+              detail={`${formatBytes(guestMemoryUsed)} / ${formatBytes(
+                guestMemoryTotal ?? memoryLimitBytes,
+              )} used`}
+            />
+          ) : (
+            <div>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  Memory (guest)
+                </span>
+                <span className="text-sm font-medium text-gray-400 tabular-nums dark:text-gray-500">
+                  —
+                </span>
+              </div>
+              <div className="mt-2 flex h-6 items-center rounded border border-dashed border-gray-300 px-2 text-xs text-gray-400 dark:border-gray-700 dark:text-gray-500">
+                Waiting for guest memory stats…
+              </div>
+              <div className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                This appears after the guest agent reports its first sample.
+              </div>
+            </div>
+          )}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {[

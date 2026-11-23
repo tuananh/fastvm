@@ -422,7 +422,7 @@ export function VmTable({
                         <span className="text-gray-400 dark:text-gray-500">…</span>
                       ) : statsFailed || stats === undefined ? (
                         <StatsPlaceholder title="Live stats are unavailable for this sandbox." />
-                      ) : (
+                      ) : hasGuestMemory ? (
                         <div className="grid min-w-0 grid-cols-[minmax(48px,1fr)_auto] items-center gap-2">
                           <MiniUsageGraph
                             percent={memoryPercent}
@@ -430,19 +430,20 @@ export function VmTable({
                           />
                           <span
                             className="whitespace-nowrap font-mono text-xs text-gray-500 tabular-nums dark:text-gray-400"
-                            title={
-                              hasGuestMemory
-                                ? "Guest memory used from /proc/meminfo"
-                                : "Guest memory stats unavailable; rebuild the image with the current agent"
-                            }
+                            title="Guest memory used from /proc/meminfo"
                           >
-                            {hasGuestMemory
-                              ? `${formatBytes(guestMemoryUsed)} / ${formatBytes(
-                                  guestMemoryTotal ?? memoryLimitBytes,
-                                )}`
-                              : "—"}
+                            {`${formatBytes(guestMemoryUsed)} / ${formatBytes(
+                              guestMemoryTotal ?? memoryLimitBytes,
+                            )}`}
                           </span>
                         </div>
+                      ) : (
+                        <span
+                          className="text-xs text-gray-400 dark:text-gray-500"
+                          title="Guest memory stats are not available yet"
+                        >
+                          —
+                        </span>
                       )}
                     </td>
                     <td className={cn(TD_CLASS, "text-right font-mono whitespace-nowrap")}>

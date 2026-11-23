@@ -41,7 +41,11 @@ export function UtilizationBar({
           {formatPercent(clamped)}
         </span>
       </div>
-      {showHistory ? (
+      {showHistory && history.length === 0 ? (
+        <div className="mt-2 flex h-6 items-center rounded border border-dashed border-gray-300 px-2 text-xs text-gray-400 dark:border-gray-700 dark:text-gray-500">
+          Waiting for samples…
+        </div>
+      ) : showHistory ? (
         <div
           role="progressbar"
           aria-label={label}

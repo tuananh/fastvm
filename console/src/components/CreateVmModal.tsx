@@ -47,8 +47,8 @@ interface FormErrors {
   memory_mb?: string;
 }
 
-const DEFAULT_VCPUS = "2";
-const DEFAULT_MEMORY = "512";
+const DEFAULT_VCPUS = "1";
+const DEFAULT_MEMORY = "128";
 
 function validateDataVolume(volume: DataVolumeRow): DataVolumeErrors {
   const errors: DataVolumeErrors = {};
