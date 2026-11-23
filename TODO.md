@@ -32,30 +32,40 @@ Longer-term ideas and research items. Check items off as they land.
 
 ## Remote access
 
-- [ ] **SSH front door (`ssh ubuntu@fastvm.cloud`)**
-  - Let users reach a sandbox over standard SSH without knowing its host IP or
-    published port, e.g. `ssh ubuntu@fastvm.cloud` once a hosted domain exists.
-  - Decide the address model: one shared domain with username/key-based routing,
-    or per-sandbox subdomains such as `ubuntu@my-sandbox.fastvm.cloud`; wildcard
-    DNS (`*.fastvm.cloud`) is likely simpler and avoids ambiguity.
-  - Add a host-side SSH gateway that authenticates the client, resolves the
-    target sandbox, wakes it if necessary, and TCP-proxies to `sshd` on the
-    guest. Keep the guest port private.
-  - Guest prerequisites: `sshd` in the base image or via `user_data`,
-    authorized-key injection, host-key generation, and a stable `ubuntu` (or
-    configurable) user.
-  - Decide authentication: per-sandbox authorized keys, short-lived SSH
-    certificates from a host CA, or an OIDC/GitHub-backed gateway; consider
-    MFA, key rotation, and audit logs.
-  - Handle host-key verification and `known_hosts` cleanly, especially for
-    ephemeral sandboxes; a host CA and `@cert-authority` entry may be preferable
-    to trusting every generated host key.
-  - Add `fastvmctl ssh <sandbox>` as a convenience wrapper around the gateway,
-    and document manual `ProxyCommand`/`ProxyJump` usage.
-  - Cover wake-on-connect, idle timeouts, concurrent sessions, and cleanup when
-    the sandbox is deleted.
-  - Research prior art: GitHub Codespaces, Gitpod, Coder, Fly.io SSH, and
-    Tailscale SSH.
+- [ ] **SSH-created sandboxes (`ssh <image>@fastvm.cloud`)**
+  - Let a user create a new sandbox just by SSHing to an image name at a hosted
+    domain, e.g. `ssh ubuntu@fastvm.cloud` or `ssh python@fastvm.cloud`.
+  - The SSH username is the **image name**, not a sandbox name or Linux user.
+    The gateway creates a fresh sandbox from that image on connect.
+  - Host-side SSH gateway:
+    - accept the SSH connection and authenticate the client by public key
+    - resolve the username as an image reference (or image alias)
+    - create, boot, and wait for the sandbox
+    - proxy the SSH session to `sshd` inside the guest
+    - clean up the sandbox when the session ends, subject to a TTL
+  - Image naming: SSH usernames cannot contain `/`, `:`, or other image-ref
+    punctuation. Define a short alias mapping (e.g. `ubuntu` -> `ubuntu:24.04`,
+    `python` -> `ghcr.io/.../python:3.12`) or an allowed image-name subset.
+  - Guest requirements: images need `sshd` and an authorized-key path, or the
+    gateway must inject `sshd`, keys, and a user via `user_data` / an init hook.
+    Decide whether non-SSH images are rejected or wrapped in an SSH-enabled
+    image.
+  - Authentication: per-user public keys, short-lived SSH certificates, or an
+    OIDC/GitHub-backed key lookup. Prevent anonymous compute creation with
+    quotas, rate limits, and abuse controls.
+  - Host keys: use an SSH host CA so ephemeral guests do not produce
+    `known_hosts` warnings.
+  - Decide session semantics:
+    - ephemeral: disconnect deletes the VM
+    - resumable: reconnect by key/session id returns to the same VM
+    - detached: VM survives disconnect until TTL
+  - Consider what standard SSH features must work: PTY, `scp`, `sftp`,
+    port forwarding, multiple sessions, `ssh -t image@domain -- command`.
+  - Show image pull/boot progress on stderr before handing over the session.
+  - Add a local `fastvmctl ssh <image>` equivalent and document
+    `ProxyCommand`/`ProxyJump` usage.
+  - Research prior art: GitHub Codespaces, Gitpod, Coder, Fly.io SSH,
+    Tailscale SSH, and `ssh`-to-container services.
 
 ## Secrets
 
