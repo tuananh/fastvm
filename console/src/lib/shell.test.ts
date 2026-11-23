@@ -244,7 +244,7 @@ describe("connectShell", () => {
 
     expect(exits).toEqual([]);
     expect(errors).toEqual([
-      "Could not open the shell session (WebSocket code 1006). Make sure fastvmd is running a current build and that the console proxy can reach its socket.",
+      "Could not open the shell session (WebSocket code 1006). Make sure fastvmd is running a current build and that the console proxy can reach the daemon API.",
     ]);
   });
 

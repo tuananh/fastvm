@@ -9,10 +9,12 @@ import {
   listEvents,
   listImages,
   listSandboxes,
+  pullImage,
+  removeImage,
   sleepSandbox,
   wakeSandbox,
 } from "./api";
-import type { CreateSandboxInput } from "./api";
+import type { CreateSandboxInput, PullImageInput } from "./api";
 
 /** Stable TanStack Query keys. Mutations invalidate by key prefix. */
 export const queryKeys = {
@@ -72,6 +74,33 @@ export function useImages() {
     queryKey: queryKeys.images,
     queryFn: listImages,
     staleTime: 60_000,
+  });
+}
+
+/** `POST /v1/images/pull` */
+export function usePullImage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PullImageInput) => pullImage(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.images });
+    },
+  });
+}
+
+export interface RemoveImageVars {
+  ref: string;
+  force?: boolean;
+}
+
+/** `DELETE /v1/images?ref=...` */
+export function useRemoveImage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ref, force }: RemoveImageVars) => removeImage(ref, force),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.images });
+    },
   });
 }
 

@@ -17,6 +17,7 @@ import {
 import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { PlusIcon, ServerIcon } from "./icons";
 import type { PendingAction, VmActionKind } from "./vmActions";
+import { MiniUsageGraph } from "./UsageGraph";
 import { VmActionsMenu } from "./VmActionsMenu";
 import { VmStatusTag } from "./VmStatusTag";
 
@@ -52,20 +53,6 @@ const STATE_FILTERS: readonly SandboxState[] = [
 const TH_CLASS =
   "px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400";
 const TD_CLASS = "px-4 py-3 align-middle text-sm";
-
-function cpuBarClass(percent: number): string {
-  if (percent >= 85) {
-    return "bg-red-500";
-  }
-  if (percent >= 60) {
-    return "bg-amber-500";
-  }
-  return "bg-emerald-500";
-}
-
-function memoryBarClass(percent: number): string {
-  return percent >= 85 ? "bg-red-500" : "bg-indigo-500";
-}
 
 function StatsPlaceholder({ title }: { title: string }) {
   return (
@@ -338,18 +325,21 @@ export function VmTable({
                     : sandbox.memory_mb) *
                   1024 *
                   1024;
+                const guestMemoryUsed = stats?.guest_memory_used_bytes;
+                const guestMemoryTotal = stats?.guest_memory_total_bytes;
+                const hasGuestMemory = guestMemoryUsed !== undefined && guestMemoryUsed > 0;
                 const memoryPercent =
-                  stats === undefined
+                  stats === undefined || !hasGuestMemory
                     ? 0
                     : clampPercent(
-                        memoryLimitBytes > 0
-                          ? (stats.memory_rss_bytes / memoryLimitBytes) * 100
-                          : 0,
+                        memoryLimitBytes > 0 ? (guestMemoryUsed / memoryLimitBytes) * 100 : 0,
                       );
                 const image = imagesByDigest.get(sandbox.base_disk);
                 const imageText =
                   image === undefined ? shortDigest(sandbox.base_disk, 18) : imageLabel(image);
                 const volumes = sandbox.volumes ?? [];
+                const dataVolumes = sandbox.data_volumes ?? [];
+                const volumeCount = volumes.length + dataVolumes.length;
 
                 return (
                   <tr
@@ -379,21 +369,25 @@ export function VmTable({
                         <span
                           className="text-xs text-gray-500 dark:text-gray-400"
                           title={
-                            volumes.length > 0
-                              ? `${sandbox.id}\n${volumes
-                                  .map(
+                            volumeCount > 0
+                              ? [
+                                  sandbox.id,
+                                  ...volumes.map(
                                     (volume) =>
                                       `${volume.host_path} → ${volume.guest_path}${
                                         volume.read_only === true ? " (read-only)" : ""
                                       }`,
-                                  )
-                                  .join("\n")}`
+                                  ),
+                                  ...dataVolumes.map(
+                                    (volume) => `${volume.size_gb} GiB → ${volume.mount} (block)`,
+                                  ),
+                                ].join("\n")
                               : sandbox.id
                           }
                         >
                           {shortId(sandbox.id, 10)}
-                          {volumes.length > 0
-                            ? ` · ${volumes.length} vol${volumes.length === 1 ? "" : "s"}`
+                          {volumeCount > 0
+                            ? ` · ${volumeCount} vol${volumeCount === 1 ? "" : "s"}`
                             : ""}
                         </span>
                       </div>
@@ -416,19 +410,7 @@ export function VmTable({
                         <StatsPlaceholder title="Live stats are unavailable for this sandbox." />
                       ) : (
                         <div className="grid min-w-0 grid-cols-[minmax(48px,1fr)_auto] items-center gap-2">
-                          <div
-                            className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
-                            role="progressbar"
-                            aria-label="CPU utilization"
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={Math.round(cpuPercent)}
-                          >
-                            <div
-                              className={cn("h-full rounded-full", cpuBarClass(cpuPercent))}
-                              style={{ width: `${cpuPercent}%` }}
-                            />
-                          </div>
+                          <MiniUsageGraph percent={cpuPercent} label="CPU utilization" />
                           <span className="font-mono text-xs text-gray-500 tabular-nums dark:text-gray-400">
                             {formatPercent(cpuPercent)}
                           </span>
@@ -442,23 +424,23 @@ export function VmTable({
                         <StatsPlaceholder title="Live stats are unavailable for this sandbox." />
                       ) : (
                         <div className="grid min-w-0 grid-cols-[minmax(48px,1fr)_auto] items-center gap-2">
-                          <div
-                            className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
-                            role="progressbar"
-                            aria-label="Memory utilization"
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={Math.round(memoryPercent)}
+                          <MiniUsageGraph
+                            percent={memoryPercent}
+                            label="Guest memory utilization"
+                          />
+                          <span
+                            className="whitespace-nowrap font-mono text-xs text-gray-500 tabular-nums dark:text-gray-400"
+                            title={
+                              hasGuestMemory
+                                ? "Guest memory used from /proc/meminfo"
+                                : "Guest memory stats unavailable; rebuild the image with the current agent"
+                            }
                           >
-                            <div
-                              className={cn("h-full rounded-full", memoryBarClass(memoryPercent))}
-                              style={{ width: `${memoryPercent}%` }}
-                            />
-                          </div>
-                          <span className="whitespace-nowrap font-mono text-xs text-gray-500 tabular-nums dark:text-gray-400">
-                            {formatBytes(stats.memory_rss_bytes)}
-                            <span className="text-gray-400 dark:text-gray-500"> / </span>
-                            {stats.memory_mb} MB
+                            {hasGuestMemory
+                              ? `${formatBytes(guestMemoryUsed)} / ${formatBytes(
+                                  guestMemoryTotal ?? memoryLimitBytes,
+                                )}`
+                              : "—"}
                           </span>
                         </div>
                       )}

@@ -164,7 +164,7 @@ export function connectShell(
       // fastvmd is down, on an older build without the exec endpoint, or the
       // proxy cannot reach its socket. Give the user an actionable hint.
       callbacks.onError?.(
-        "Could not open the shell session (WebSocket code 1006). Make sure fastvmd is running a current build and that the console proxy can reach its socket.",
+        "Could not open the shell session (WebSocket code 1006). Make sure fastvmd is running a current build and that the console proxy can reach the daemon API.",
       );
     } else {
       callbacks.onError?.(`shell connection closed unexpectedly (code ${event.code})`);

@@ -91,6 +91,23 @@ func (c *apiClient) shutdown(ctx context.Context) error {
 	return c.do(ctx, http.MethodPut, "vm.shutdown", nil, nil)
 }
 
+// deviceCounters is one entry in /vm.counters. Cloud Hypervisor returns a
+// device_type string plus type-specific uint64 counters.
+type deviceCounters struct {
+	DeviceType string `json:"device_type"`
+	ReadBytes  uint64 `json:"read_bytes"`
+	WriteBytes uint64 `json:"write_bytes"`
+}
+
+// counters reads per-device virtio counters (GET /vm.counters).
+func (c *apiClient) counters(ctx context.Context) (map[string]deviceCounters, error) {
+	var out map[string]deviceCounters
+	if err := c.do(ctx, http.MethodGet, "vm.counters", nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // snapshot writes a paused VM snapshot into dir (PUT /vm.snapshot).
 func (c *apiClient) snapshot(ctx context.Context, dir string) error {
 	return c.do(ctx, http.MethodPut, "vm.snapshot", map[string]string{

@@ -146,6 +146,61 @@ describe("DashboardPage integration", () => {
     expect(await screen.findByText("Base image")).toBeInTheDocument();
   });
 
+  it("navigates to the Images page", async () => {
+    renderDashboard();
+
+    fireEvent.click(await screen.findByRole("link", { name: "Images" }));
+
+    expect(await screen.findByText("Base images")).toBeInTheDocument();
+    expect(screen.queryByText("Total VMs")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pull image" }));
+    expect(
+      await screen.findByText(
+        "Fetch an OCI image and build a bootable base disk. The first pull can take a while.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Image reference")).toBeInTheDocument();
+    expect(screen.getByLabelText("Size (GiB, optional)")).toBeInTheDocument();
+  });
+
+  it("creates a VM from a selected image with the image preselected", async () => {
+    window.history.replaceState(null, "", "#");
+    renderDashboard();
+
+    fireEvent.click(await screen.findByRole("link", { name: "Images" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Create VM from demo:latest" }));
+
+    expect(await screen.findByText("Create virtual machine")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /Base image/ })).toHaveValue("sha256:abcdef");
+  });
+
+  it("opens the pull dialog from the empty Create VM image hint", async () => {
+    window.history.replaceState(null, "", "#");
+    const original = fetchMock.getMockImplementation() as
+      | ((input: RequestInfo | URL) => Promise<Response>)
+      | undefined;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/v1/images")) {
+        return fakeResponse([]);
+      }
+      if (original !== undefined) {
+        return original(input);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    renderDashboard();
+    fireEvent.click(await screen.findByRole("button", { name: "Create VM" }));
+    expect(await screen.findByText(/No base disk images/)).toBeInTheDocument();
+    const imageLinks = screen.getAllByRole("link", { name: "Images" });
+    fireEvent.click(imageLinks[imageLinks.length - 1]);
+
+    expect(await screen.findByLabelText("Image reference")).toBeInTheDocument();
+    expect(screen.getByLabelText("Size (GiB, optional)")).toBeInTheDocument();
+  });
+
   it("renders the sidebar shell and toggles the mobile sidebar", async () => {
     renderDashboard();
 

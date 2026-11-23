@@ -16,16 +16,35 @@ import (
 // configurable at runtime from userspace without cgo.
 const userHZ = 100
 
+// blockCounters sums CH's per-block-device counters. The bool is false when
+// the VM has no block devices in /vm.counters, in which case the caller keeps
+// the /proc fallback.
+func blockCounters(counters map[string]deviceCounters) (read, write uint64, found bool) {
+	for _, counter := range counters {
+		// CH v54 omits device_type on some devices; block counters are
+		// identified by their read_bytes/write_bytes fields. Net counters use
+		// rx_bytes/tx_bytes instead.
+		if counter.DeviceType != "" && counter.DeviceType != "block" {
+			continue
+		}
+		read += counter.ReadBytes
+		write += counter.WriteBytes
+		found = true
+	}
+	return read, write, found
+}
+
 // readVMStats reads host-side counters for one VMM process.
 //
 // Limitations (documented by design, docs/DESIGN.md §5.3):
 //   - CPU time is the sum of utime+stime across all VMM threads, including
 //     device/API threads, not per-vCPU guest time. It is normalized by vCPU
 //     capacity by the caller, so it is a faithful "is the sandbox busy" signal.
-//   - Block I/O is /proc/<pid>/io read_bytes/write_bytes, which count bytes
-//     fetched from storage, not page-cache hits.
+//   - Block I/O uses CH /vm.counters (per block device) when available, with
+//     /proc/<pid>/io as a fallback. Page-cache hits may not be counted.
 //   - Memory RSS is /proc/<pid>/status VmRSS, the resident set of the whole
-//     VMM process (guest memory plus device/API overhead).
+//     VMM process (guest memory plus device/API overhead). CH does not expose
+//     guest-used memory without balloon stats.
 //   - Network counters live in the switch, not the VMM, and stay zero here.
 func readVMStats(pid int) (vmm.Stats, error) {
 	var st vmm.Stats

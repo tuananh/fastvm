@@ -192,11 +192,17 @@ export function VmDetailDrawer({
   const statsData = stats.data;
 
   const memoryLimitBytes = sandbox.memory_mb * 1024 * 1024;
+  const guestMemoryUsed = statsData?.guest_memory_used_bytes;
+  const guestMemoryTotal = statsData?.guest_memory_total_bytes;
+  const hasGuestMemory = guestMemoryUsed !== undefined && guestMemoryUsed > 0;
   const memoryPercent =
     statsData === undefined
       ? 0
       : clampPercent(
-          memoryLimitBytes > 0 ? (statsData.memory_rss_bytes / memoryLimitBytes) * 100 : 0,
+          memoryLimitBytes > 0
+            ? ((hasGuestMemory ? guestMemoryUsed : statsData.memory_rss_bytes) / memoryLimitBytes) *
+                100
+            : 0,
         );
 
   let statsSection: ReactNode;
@@ -219,20 +225,27 @@ export function VmDetailDrawer({
           <UtilizationBar
             label="CPU"
             percent={statsData.cpu_percent}
+            showHistory
             detail={`${statsData.cpu_percent.toFixed(1)}% of ${statsData.vcpus} vCPU${
               statsData.vcpus === 1 ? "" : "s"
             }`}
           />
           <UtilizationBar
-            label="Memory"
+            label="Memory (guest)"
             percent={memoryPercent}
-            detail={`${formatBytes(statsData.memory_rss_bytes)} / ${statsData.memory_mb} MB`}
+            showHistory
+            detail={
+              hasGuestMemory
+                ? `${formatBytes(guestMemoryUsed)} / ${formatBytes(guestMemoryTotal ?? memoryLimitBytes)} used`
+                : "Guest memory stats unavailable; rebuild the image with the current agent."
+            }
           />
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {[
             { label: "Uptime", value: formatDuration(statsData.uptime_seconds) },
             { label: "CPU", value: formatPercent(statsData.cpu_percent) },
+            { label: "Host RSS", value: formatBytes(statsData.memory_rss_bytes) },
             { label: "Block read", value: formatBytes(statsData.block_read_bytes) },
             { label: "Block write", value: formatBytes(statsData.block_write_bytes) },
             { label: "Network RX", value: formatBytes(statsData.rx_bytes) },
@@ -429,6 +442,31 @@ export function VmDetailDrawer({
           ) : (
             <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
               No host volumes mounted.
+            </p>
+          )}
+        </section>
+
+        <section className="border-t border-gray-100 pt-5 dark:border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Data volumes</h3>
+          {sandbox.data_volumes !== undefined && sandbox.data_volumes.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {sandbox.data_volumes.map((volume, index) => (
+                <li
+                  key={`${volume.mount}-${index}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-800"
+                >
+                  <span className="min-w-0 text-xs break-all text-gray-700 dark:text-gray-300">
+                    <span className="font-mono">{volume.size_gb} GiB</span>
+                    <span className="text-gray-400 dark:text-gray-500"> → </span>
+                    <span className="font-mono">{volume.mount}</span>
+                  </span>
+                  <Badge tone="neutral">block</Badge>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+              No data volumes attached.
             </p>
           )}
         </section>

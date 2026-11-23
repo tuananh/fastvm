@@ -1,13 +1,22 @@
 import { z } from "zod";
 import {
   baseDiskListSchema,
+  baseDiskSchema,
   eventListSchema,
   sandboxListSchema,
   sandboxSchema,
   sandboxStatsSchema,
   versionInfoSchema,
 } from "./types";
-import type { BaseDisk, Event, Sandbox, SandboxStats, VersionInfo, Volume } from "./types";
+import type {
+  BaseDisk,
+  DataVolume,
+  Event,
+  Sandbox,
+  SandboxStats,
+  VersionInfo,
+  Volume,
+} from "./types";
 
 /** JSON error envelope returned by fastvmd (`internal/api.ErrorEnvelope`). */
 export interface ApiErrorBody {
@@ -63,8 +72,8 @@ async function readPayload(response: Response): Promise<unknown> {
 }
 
 /**
- * Same-origin API request. The dev/preview server proxies `/v1/*` to the
- * fastvmd unix socket, so relative paths are always used.
+ * Same-origin API request. The dev/preview server proxies `/v1/*` to fastvmd,
+ * so relative paths are always used.
  */
 export async function request<T>(
   path: string,
@@ -117,6 +126,30 @@ export function listImages(): Promise<BaseDisk[]> {
   return request(`${API_PREFIX}/images`, {}, baseDiskListSchema);
 }
 
+/** Request body for `POST /v1/images/pull`. */
+export interface PullImageInput {
+  ref: string;
+  size_gb?: number;
+}
+
+/** `POST /v1/images/pull` */
+export function pullImage(input: PullImageInput): Promise<BaseDisk> {
+  return request(
+    `${API_PREFIX}/images/pull`,
+    { method: "POST", body: JSON.stringify(input) },
+    baseDiskSchema,
+  );
+}
+
+/** `DELETE /v1/images?ref=...&force=...` */
+export function removeImage(ref: string, force = false): Promise<BaseDisk> {
+  const params = new URLSearchParams({ ref });
+  if (force) {
+    params.set("force", "true");
+  }
+  return request(`${API_PREFIX}/images?${params.toString()}`, { method: "DELETE" }, baseDiskSchema);
+}
+
 /** `GET /v1/events?limit=N` */
 export function listEvents(limit = 50): Promise<Event[]> {
   return request(
@@ -154,6 +187,8 @@ export interface CreateSandboxInput {
   no_auto_sleep?: boolean;
   /** Host directories to mount into the guest with virtio-fs. */
   volumes?: Volume[];
+  /** Writable block volumes cloned from a blank ext4 template. */
+  data_volumes?: DataVolume[];
 }
 
 /** `POST /v1/sandboxes` */

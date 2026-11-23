@@ -219,6 +219,16 @@ func (s *Server) dispatch(ctx context.Context, c *conn, req Request) {
 		s.broadcast(Event{Type: EventWorkloadBusy, Message: fmt.Sprintf("busy=%t", req.Busy)})
 	case OpHeartbeat, OpReady:
 		// No-op acknowledgement.
+	case OpStats:
+		stats, err := guestMemoryStats()
+		if err != nil {
+			resp.ExitCode = -1
+			resp.Error = err.Error()
+		} else {
+			resp.MemoryTotalBytes = stats.MemoryTotalBytes
+			resp.MemoryAvailableBytes = stats.MemoryAvailableBytes
+			resp.MemoryUsedBytes = stats.MemoryUsedBytes
+		}
 	case OpFileStat:
 		size, mode, err := fileStat(req.Path)
 		if err != nil {

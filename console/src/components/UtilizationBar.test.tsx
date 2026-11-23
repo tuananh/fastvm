@@ -30,3 +30,15 @@ describe("UtilizationBar", () => {
     expect(bar.closest("[data-percent]")).toHaveAttribute("data-percent", "42.5");
   });
 });
+
+describe("UtilizationBar history graph", () => {
+  it("renders one bar per distinct sample", () => {
+    installDomStubs();
+    const { rerender } = render(<UtilizationBar label="CPU" percent={10} showHistory />);
+    rerender(<UtilizationBar label="CPU" percent={20} showHistory />);
+    rerender(<UtilizationBar label="CPU" percent={30} showHistory />);
+    const graph = screen.getByTestId("usage-history");
+    expect(graph).toHaveAttribute("aria-valuenow", "30");
+    expect(graph.children).toHaveLength(3);
+  });
+});

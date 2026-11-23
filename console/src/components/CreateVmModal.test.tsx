@@ -146,7 +146,106 @@ describe("CreateVmModal host volumes", () => {
     expect(
       await screen.findByText("Host path must be absolute (start with /)."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Absolute path, no spaces, ':' or ','.")).toBeInTheDocument();
+    expect(screen.getAllByText("Absolute path, no spaces, ':' or ','.").length).toBeGreaterThan(0);
     expect(queryMocks.create.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate data volume mount paths", async () => {
+    renderModal();
+    chooseImage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add data volume" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add data volume" }));
+    const mounts = screen.getAllByLabelText("Mount path");
+    fireEvent.change(mounts[0], { target: { value: "/data" } });
+    fireEvent.change(mounts[1], { target: { value: "/data" } });
+
+    submit();
+
+    expect(await screen.findByText("Data volume mount paths must be unique.")).toBeInTheDocument();
+    expect(queryMocks.create.mutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("CreateVmModal data volumes", () => {
+  it("sends block data volumes with the create payload", async () => {
+    renderModal();
+    chooseImage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add data volume" }));
+    fireEvent.change(screen.getByLabelText("Size (GiB)"), {
+      target: { value: "16" },
+    });
+    fireEvent.change(screen.getByLabelText("Mount path"), {
+      target: { value: "/workspace" },
+    });
+
+    submit();
+
+    await waitFor(() => {
+      expect(queryMocks.create.mutateAsync).toHaveBeenCalledTimes(1);
+    });
+    const input = queryMocks.create.mutateAsync.mock.calls[0][0] as {
+      data_volumes?: unknown[];
+    };
+    expect(input.data_volumes).toEqual([{ size_gb: 16, mount: "/workspace" }]);
+  });
+
+  it("validates size, mount path, and duplicate mounts", async () => {
+    renderModal();
+    chooseImage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add data volume" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add data volume" }));
+    const sizes = screen.getAllByLabelText("Size (GiB)");
+    const mounts = screen.getAllByLabelText("Mount path");
+    fireEvent.change(sizes[0], { target: { value: "0" } });
+    fireEvent.change(mounts[0], { target: { value: "relative" } });
+    fireEvent.change(mounts[1], { target: { value: "relative" } });
+
+    submit();
+
+    expect(
+      await screen.findByText("Size must be a whole number between 1 and 1024 GiB."),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Absolute path, no spaces, ':' or ','.").length).toBeGreaterThan(0);
+    expect(queryMocks.create.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate data volume mount paths", async () => {
+    renderModal();
+    chooseImage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add data volume" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add data volume" }));
+    const mounts = screen.getAllByLabelText("Mount path");
+    fireEvent.change(mounts[0], { target: { value: "/data" } });
+    fireEvent.change(mounts[1], { target: { value: "/data" } });
+
+    submit();
+
+    expect(await screen.findByText("Data volume mount paths must be unique.")).toBeInTheDocument();
+    expect(queryMocks.create.mutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("CreateVmModal empty image store", () => {
+  it("links to the Images page when no base images exist", async () => {
+    const previousImages = queryMocks.images;
+    queryMocks.images = [];
+    const onGoToImages = vi.fn();
+    try {
+      render(
+        <ToastProvider>
+          <CreateVmModal open onClose={vi.fn()} onGoToImages={onGoToImages} />
+        </ToastProvider>,
+      );
+
+      expect(await screen.findByText(/No base disk images/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("link", { name: "Images" }));
+      expect(onGoToImages).toHaveBeenCalledTimes(1);
+    } finally {
+      queryMocks.images = previousImages;
+    }
   });
 });

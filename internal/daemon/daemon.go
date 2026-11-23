@@ -173,13 +173,15 @@ type runtime struct {
 	lastTick  time.Time
 
 	// Latest sampler snapshot, served by Stats without touching /proc.
-	cpuPct          float64
-	blockReadBytes  uint64
-	blockWriteBytes uint64
-	memoryRSSBytes  uint64
-	rxBytes         uint64
-	txBytes         uint64
-	statsAt         time.Time
+	cpuPct                float64
+	blockReadBytes        uint64
+	blockWriteBytes       uint64
+	memoryRSSBytes        uint64
+	guestMemoryUsedBytes  uint64
+	guestMemoryTotalBytes uint64
+	rxBytes               uint64
+	txBytes               uint64
+	statsAt               time.Time
 
 	execActive      int
 	workload        []string
@@ -604,6 +606,8 @@ func (d *Daemon) Stats(ctx context.Context, ref string) (types.SandboxStats, err
 		}
 	}
 	out.MemoryRSSBytes = rt.memoryRSSBytes
+	out.GuestMemoryUsedBytes = rt.guestMemoryUsedBytes
+	out.GuestMemoryTotalBytes = rt.guestMemoryTotalBytes
 	out.BlockReadBytes = rt.blockReadBytes
 	out.BlockWriteBytes = rt.blockWriteBytes
 	out.RxBytes = rt.rxBytes
@@ -1183,6 +1187,15 @@ func (d *Daemon) sampleLocked(rt *runtime, sb *types.Sandbox) {
 			}
 		}
 	}
+	if rt.ac != nil {
+		statsCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		gs, err := rt.ac.Stats(statsCtx)
+		cancel()
+		if err == nil {
+			rt.guestMemoryUsedBytes = gs.MemoryUsedBytes
+			rt.guestMemoryTotalBytes = gs.MemoryTotalBytes
+		}
+	}
 	if st, err := d.net.Stats(context.Background(), sb.ID); err == nil {
 		rt.statsAt = now
 		rt.rxBytes, rt.txBytes = st.RxBytes, st.TxBytes
@@ -1405,12 +1418,20 @@ func (d *Daemon) runtimeFor(ctx context.Context, ref string) (*runtime, error) {
 	}
 	d.mu.Lock()
 	rt := d.runtimes[sb.ID]
+	createdRuntime := false
 	if rt == nil {
 		rt = d.newRuntime(sb.ID)
 		rt.sb = sb
 		d.runtimes[sb.ID] = rt
+		createdRuntime = true
 	}
 	d.mu.Unlock()
+	if createdRuntime {
+		// Sandboxes adopted after a daemon restart (or woken from Dormant) have
+		// no monitor goroutine yet; start one so stats and idle policy work.
+		d.wg.Add(1)
+		go d.monitor(rt)
+	}
 	rt.mu.Lock()
 	if rt.sb.ID == "" {
 		rt.sb = sb

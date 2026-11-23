@@ -527,9 +527,20 @@ func (v *vm) Stop(ctx context.Context) error {
 // Wait blocks until the VMM process exits.
 func (v *vm) Wait(ctx context.Context) error { return v.proc.wait(ctx) }
 
-// Stats reads host-side counters for the VMM process.
-func (v *vm) Stats(context.Context) (vmm.Stats, error) {
-	return readVMStats(v.proc.pid())
+// Stats reads host-side CPU/RSS counters for the VMM process, preferring CH's
+// per-block-device counters over /proc/<pid>/io for block I/O.
+func (v *vm) Stats(ctx context.Context) (vmm.Stats, error) {
+	st, err := readVMStats(v.proc.pid())
+	if err != nil {
+		return st, err
+	}
+	if counts, cerr := v.api.counters(ctx); cerr == nil {
+		if read, write, found := blockCounters(counts); found {
+			st.BlockReadByte = read
+			st.BlockWriteByte = write
+		}
+	}
+	return st, nil
 }
 
 // APISocket reports the Cloud Hypervisor API socket path.

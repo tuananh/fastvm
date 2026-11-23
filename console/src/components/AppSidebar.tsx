@@ -1,5 +1,7 @@
 import {
+  ArrowTopRightOnSquareIcon,
   BookOpenIcon,
+  CircleStackIcon,
   ServerStackIcon,
   Squares2X2Icon,
   XMarkIcon,
@@ -9,9 +11,15 @@ import { BoltIcon } from "./icons";
 import { ThemeMenu } from "./ThemeMenu";
 import { UserMenu } from "./UserMenu";
 
+export type ConsoleView = "sandboxes" | "images";
+
 export interface AppSidebarProps {
   /** Whether the mobile slide-in sidebar is open (ignored on desktop). */
   open: boolean;
+  /** Current top-level page. */
+  view: ConsoleView;
+  /** Switch pages; also closes the mobile drawer. */
+  onNavigate: (view: ConsoleView) => void;
   /** Closes the mobile sidebar (overlay, close button and nav links call it). */
   onClose: () => void;
 }
@@ -29,7 +37,7 @@ const NAV_LINK_ACTIVE =
  * Static on desktop, fixed slide-in drawer below `lg`. The page shell owns the
  * hamburger toggle; every link closes the drawer on mobile via `onClose`.
  */
-export function AppSidebar({ open, onClose }: AppSidebarProps) {
+export function AppSidebar({ open, view, onNavigate, onClose }: AppSidebarProps) {
   return (
     <>
       <div
@@ -71,9 +79,13 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
               <li>
                 <a
                   href="#overview"
-                  onClick={onClose}
-                  aria-current="page"
-                  className={NAV_LINK_ACTIVE}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onNavigate("sandboxes");
+                    onClose();
+                  }}
+                  aria-current={view === "sandboxes" ? "page" : undefined}
+                  className={view === "sandboxes" ? NAV_LINK_ACTIVE : NAV_LINK}
                 >
                   <Squares2X2Icon
                     className="size-5 shrink-0 text-indigo-600 dark:text-indigo-400"
@@ -83,12 +95,38 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
                 </a>
               </li>
               <li>
-                <a href="#sandboxes" onClick={onClose} className={NAV_LINK}>
+                <a
+                  href="#sandboxes"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onNavigate("sandboxes");
+                    onClose();
+                  }}
+                  className={NAV_LINK}
+                >
                   <ServerStackIcon
                     className="size-5 shrink-0 text-gray-500 dark:text-gray-400"
                     aria-hidden="true"
                   />
                   Sandboxes
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#images"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onNavigate("images");
+                    onClose();
+                  }}
+                  aria-current={view === "images" ? "page" : undefined}
+                  className={view === "images" ? NAV_LINK_ACTIVE : NAV_LINK}
+                >
+                  <CircleStackIcon
+                    className="size-5 shrink-0 text-gray-500 dark:text-gray-400"
+                    aria-hidden="true"
+                  />
+                  Images
                 </a>
               </li>
               <li>
@@ -104,6 +142,10 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
                     aria-hidden="true"
                   />
                   Documentation
+                  <ArrowTopRightOnSquareIcon
+                    className="ml-auto size-4 shrink-0 text-gray-400 dark:text-gray-500"
+                    aria-hidden="true"
+                  />
                 </a>
               </li>
             </ul>

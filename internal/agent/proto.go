@@ -21,6 +21,7 @@ const (
 	OpSignal    = "signal"
 	OpTouch     = "touch"
 	OpBusy      = "busy"
+	OpStats     = "stats"
 	OpPorts     = "ports"
 	OpFileStat  = "file_stat"
 	OpFileRead  = "file_read"
@@ -86,6 +87,18 @@ type Response struct {
 	FileMode uint32 `json:"file_mode,omitempty"`
 	Data     []byte `json:"data,omitempty"`
 	Error    string `json:"error,omitempty"`
+
+	// Guest memory stats (OpStats) in bytes.
+	MemoryTotalBytes     uint64 `json:"memory_total_bytes,omitempty"`
+	MemoryAvailableBytes uint64 `json:"memory_available_bytes,omitempty"`
+	MemoryUsedBytes      uint64 `json:"memory_used_bytes,omitempty"`
+}
+
+// GuestStats is a guest-internal memory snapshot.
+type GuestStats struct {
+	MemoryTotalBytes     uint64
+	MemoryAvailableBytes uint64
+	MemoryUsedBytes      uint64
 }
 
 // Event is pushed guest -> host asynchronously.
@@ -115,6 +128,8 @@ type Client interface {
 	SetNetwork(ctx context.Context, address, gateway string) error
 	// SetHostname renames the guest after a snapshot restore.
 	SetHostname(ctx context.Context, hostname string) error
+	// Stats returns guest-internal memory usage.
+	Stats(ctx context.Context) (GuestStats, error)
 	// Touch reports explicit guest activity.
 	Touch(ctx context.Context) error
 	// Events streams agent events until the channel closes.

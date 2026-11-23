@@ -46,6 +46,16 @@ export const volumeSchema = z
   .passthrough();
 export type Volume = z.infer<typeof volumeSchema>;
 
+export const dataVolumeSchema = z
+  .object({
+    name: z.string().optional(),
+    size_gb: z.number().int(),
+    mount: z.string(),
+    path: z.string().optional(),
+  })
+  .passthrough();
+export type DataVolume = z.infer<typeof dataVolumeSchema>;
+
 /** `GET /v1/sandboxes` and `GET /v1/sandboxes/{ref}` */
 export const sandboxSchema = z
   .object({
@@ -63,6 +73,7 @@ export const sandboxSchema = z
     updated_at: z.string(),
     ports: z.array(portMappingSchema).optional(),
     volumes: z.array(volumeSchema).optional(),
+    data_volumes: z.array(dataVolumeSchema).optional(),
     error: z.string().optional(),
   })
   .passthrough();
@@ -104,6 +115,8 @@ export const sandboxStatsSchema = z
     vcpus: z.number().int(),
     memory_mb: z.number().int(),
     memory_rss_bytes: z.number().int(),
+    guest_memory_used_bytes: z.number().int().optional(),
+    guest_memory_total_bytes: z.number().int().optional(),
     uptime_seconds: z.number(),
     wake_count: z.number().int(),
     block_read_bytes: z.number().int(),

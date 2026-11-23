@@ -192,3 +192,40 @@ func TestAPIClientInfo(t *testing.T) {
 		t.Fatalf("requests = %#v", *requests)
 	}
 }
+
+func TestAPIClientCounters(t *testing.T) {
+	body := `{"block0":{"device_type":"block","read_bytes":123,"write_bytes":456},"net0":{"device_type":"net","rx_bytes":1,"tx_bytes":2}}`
+	sock, requests := testAPIServer(t, http.StatusOK, body)
+	cl := newAPIClient(sock, 5_000_000_000)
+	defer cl.close()
+	counters, err := cl.counters(context.Background())
+	if err != nil {
+		t.Fatalf("counters: %v", err)
+	}
+	if got := counters["block0"].ReadBytes; got != 123 {
+		t.Errorf("read bytes = %d", got)
+	}
+	if got := counters["net0"].DeviceType; got != "net" {
+		t.Errorf("device type = %q", got)
+	}
+	if len(*requests) != 1 || (*requests)[0] != "GET /api/v1/vm.counters " {
+		t.Fatalf("requests = %#v", *requests)
+	}
+}
+
+func TestBlockCounters(t *testing.T) {
+	read, write, found := blockCounters(map[string]deviceCounters{
+		"block0": {DeviceType: "block", ReadBytes: 10, WriteBytes: 20},
+		"block1": {DeviceType: "block", ReadBytes: 5, WriteBytes: 6},
+		"net0":   {DeviceType: "net", ReadBytes: 100, WriteBytes: 200},
+		"_disk0": {ReadBytes: 2, WriteBytes: 3},
+	})
+	if !found || read != 17 || write != 29 {
+		t.Fatalf("block counters = %d/%d found=%v", read, write, found)
+	}
+	if _, _, found := blockCounters(map[string]deviceCounters{
+		"net0": {DeviceType: "net"},
+	}); found {
+		t.Fatal("net-only counters should not count as block")
+	}
+}

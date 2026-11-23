@@ -265,7 +265,7 @@ useful work). All four must be quiet for the whole window.
 | Pure ACKs and TCP keepalives | eBPF switch (TCP flags/len) | No — an idle-but-open connection must not pin a sandbox awake |
 | exec session attached, API operation, explicit `fastvm touch` | lifecycle API / guest agent | **Yes** |
 | Workload start/exit events | guest agent | **Yes** (exit sets `workload_finished` and may move straight to `Idle`) |
-| Block-device I/O | VMM block stats / host I/O counters | **Yes** when ≥ `lifecycle.idle_detection.block_io_bytes` within the window |
+| Block-device I/O | CH `vm.counters` / host I/O counters | **Yes** when ≥ `lifecycle.idle_detection.block_io_bytes` within the window |
 | Guest CPU utilization | VMM per-vCPU / host CPU accounting | **Vetoes** idleness while above `lifecycle.idle_detection.cpu_threshold_pct`; does not reset the window by itself |
 
 **Not activity:** ARP/NDP, broadcast/multicast noise, pure ACKs and keepalives,

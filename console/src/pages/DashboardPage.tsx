@@ -1,13 +1,15 @@
 import { Bars3Icon } from "@heroicons/react/24/outline";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppSidebar } from "../components/AppSidebar";
+import type { ConsoleView } from "../components/AppSidebar";
 import { CreateVmModal } from "../components/CreateVmModal";
 import { ClockIcon, PlusIcon, RefreshIcon } from "../components/icons";
 import { SummaryCards } from "../components/SummaryCards";
 import { TerminalDialog } from "../components/TerminalDialog";
 import { VmDetailDrawer } from "../components/VmDetailDrawer";
 import { VmTable } from "../components/VmTable";
+import ImagesPage from "./ImagesPage";
 import type { PendingAction, VmActionKind } from "../components/vmActions";
 import {
   queryKeys,
@@ -40,8 +42,13 @@ export default function DashboardPage() {
   const wakeSandbox = useWakeSandbox();
   const deleteSandbox = useDeleteSandbox();
 
+  const [view, setView] = useState<ConsoleView>(() =>
+    typeof window !== "undefined" && window.location.hash === "#images" ? "images" : "sandboxes",
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [openPullOnImages, setOpenPullOnImages] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createImage, setCreateImage] = useState<string | null>(null);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Sandbox | null>(null);
@@ -51,6 +58,38 @@ export default function DashboardPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [terminalTarget, setTerminalTarget] = useState<Sandbox | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      setView(window.location.hash === "#images" ? "images" : "sandboxes");
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => {
+      window.removeEventListener("hashchange", onHashChange);
+    };
+  }, []);
+
+  const navigate = useCallback((next: ConsoleView) => {
+    setView(next);
+    const hash = next === "images" ? "#images" : "#sandboxes";
+    if (window.location.hash !== hash) {
+      window.history.replaceState(null, "", hash);
+    }
+  }, []);
+
+  const openCreate = useCallback(() => {
+    setCreateImage(null);
+    setCreateOpen(true);
+  }, []);
+
+  const createFromImage = useCallback(
+    (image: BaseDisk) => {
+      setCreateImage(image.digest);
+      setCreateOpen(true);
+      navigate("sandboxes");
+    },
+    [navigate],
+  );
 
   const sandboxes = sandboxesQuery.data ?? EMPTY_SANDBOXES;
   const images = imagesQuery.data ?? EMPTY_IMAGES;
@@ -193,7 +232,12 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
-      <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <AppSidebar
+        open={sidebarOpen}
+        view={view}
+        onNavigate={navigate}
+        onClose={() => setSidebarOpen(false)}
+      />
 
       <div className="flex flex-1 flex-col overflow-y-auto">
         <header className="flex items-center justify-between gap-4 border-b border-gray-200 bg-white px-4 py-4 sm:px-6 lg:px-8 dark:border-gray-800 dark:bg-gray-900">
@@ -210,10 +254,12 @@ export default function DashboardPage() {
             </button>
             <div className="min-w-0">
               <h1 className="truncate text-lg font-semibold text-gray-900 dark:text-white">
-                Sandboxes
+                {view === "images" ? "Images" : "Sandboxes"}
               </h1>
               <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                Micro-VMs on this host. Pause, offload, or wake them — traffic brings them back.
+                {view === "images"
+                  ? "Read-only OCI base disks shared by sandboxes."
+                  : "Micro-VMs on this host. Pause, offload, or wake them — traffic brings them back."}
               </p>
             </div>
           </div>
@@ -248,69 +294,98 @@ export default function DashboardPage() {
               {versionText}
             </span>
 
-            <IconButton
-              label="Refresh sandboxes"
-              onClick={() => void handleRefresh()}
-              disabled={manualRefreshing}
-            >
-              <RefreshIcon className={manualRefreshing ? "size-5 spinning" : "size-5"} />
-            </IconButton>
+            {view === "sandboxes" ? (
+              <>
+                <IconButton
+                  label="Refresh sandboxes"
+                  onClick={() => void handleRefresh()}
+                  disabled={manualRefreshing}
+                >
+                  <RefreshIcon className={manualRefreshing ? "size-5 spinning" : "size-5"} />
+                </IconButton>
 
-            <Button
-              variant="primary"
-              icon={<PlusIcon className="size-4" />}
-              onClick={() => setCreateOpen(true)}
-            >
-              Create VM
-            </Button>
+                <Button
+                  variant="primary"
+                  icon={<PlusIcon className="size-4" />}
+                  onClick={openCreate}
+                >
+                  Create VM
+                </Button>
+              </>
+            ) : null}
           </div>
         </header>
 
         <main className="flex-1 space-y-6 p-4 sm:p-6 lg:p-8">
-          <section id="overview" aria-label="Overview">
-            <SummaryCards sandboxes={sandboxes} loading={sandboxesQuery.isPending} />
-          </section>
-
-          <section
-            id="sandboxes"
-            aria-label="Sandboxes"
-            className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-4 sm:px-6 dark:border-gray-800">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                  All sandboxes
-                </h2>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  {sandboxes.length} VM{sandboxes.length === 1 ? "" : "s"} · Updates every 3s ·
-                  stats every 2s
-                </p>
-              </div>
-              <span
-                className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"
-                title={formatDateTime(lastUpdated)}
-              >
-                <ClockIcon className="size-3.5" /> Last updated {lastUpdatedLabel}
-              </span>
-            </div>
-
-            <VmTable
-              sandboxes={sandboxes}
-              images={images}
-              loading={sandboxesQuery.isPending || manualRefreshing}
-              error={listError}
-              pendingAction={pendingAction}
-              onCreate={() => setCreateOpen(true)}
-              onRetry={() => void handleRefresh()}
-              onDetails={openDetails}
-              onAction={(kind, sandbox) => void handleAction(kind, sandbox)}
-              onExec={openTerminal}
+          {view === "images" ? (
+            <ImagesPage
+              autoOpenPull={openPullOnImages}
+              onAutoOpenConsumed={() => setOpenPullOnImages(false)}
+              onCreateVm={createFromImage}
             />
-          </section>
+          ) : (
+            <>
+              <section id="overview" aria-label="Overview">
+                <SummaryCards sandboxes={sandboxes} loading={sandboxesQuery.isPending} />
+              </section>
+
+              <section
+                id="sandboxes"
+                aria-label="Sandboxes"
+                className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-4 sm:px-6 dark:border-gray-800">
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
+                      All sandboxes
+                    </h2>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      {sandboxes.length} VM{sandboxes.length === 1 ? "" : "s"} · Updates every 3s ·
+                      stats every 2s
+                    </p>
+                  </div>
+                  <span
+                    className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"
+                    title={formatDateTime(lastUpdated)}
+                  >
+                    <ClockIcon className="size-3.5" /> Last updated {lastUpdatedLabel}
+                  </span>
+                </div>
+
+                <VmTable
+                  sandboxes={sandboxes}
+                  images={images}
+                  loading={sandboxesQuery.isPending || manualRefreshing}
+                  error={listError}
+                  pendingAction={pendingAction}
+                  onCreate={openCreate}
+                  onRetry={() => void handleRefresh()}
+                  onDetails={openDetails}
+                  onAction={(kind, sandbox) => void handleAction(kind, sandbox)}
+                  onExec={openTerminal}
+                />
+              </section>
+            </>
+          )}
         </main>
       </div>
 
-      <CreateVmModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      {createOpen ? (
+        <CreateVmModal
+          open
+          initialImage={createImage ?? undefined}
+          onClose={() => {
+            setCreateOpen(false);
+            setCreateImage(null);
+          }}
+          onGoToImages={() => {
+            setCreateOpen(false);
+            setCreateImage(null);
+            setOpenPullOnImages(true);
+            navigate("images");
+          }}
+        />
+      ) : null}
 
       <Modal
         open={deleteOpen}

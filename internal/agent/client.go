@@ -422,6 +422,22 @@ func (cl *client) Ports(ctx context.Context) ([]int, error) {
 	return resp.Ports, nil
 }
 
+// Stats returns guest-internal memory usage from /proc/meminfo.
+func (cl *client) Stats(ctx context.Context) (GuestStats, error) {
+	resp, err := cl.request(ctx, Request{Op: OpStats})
+	if err != nil {
+		return GuestStats{}, err
+	}
+	if resp.Error != "" {
+		return GuestStats{}, fmt.Errorf("agent: stats: %s", resp.Error)
+	}
+	return GuestStats{
+		MemoryTotalBytes:     resp.MemoryTotalBytes,
+		MemoryAvailableBytes: resp.MemoryAvailableBytes,
+		MemoryUsedBytes:      resp.MemoryUsedBytes,
+	}, nil
+}
+
 func (cl *client) FileStat(ctx context.Context, path string) (int64, uint32, error) {
 	resp, err := cl.request(ctx, Request{Op: OpFileStat, Path: path})
 	if err != nil {

@@ -89,3 +89,24 @@ describe("VmDetailDrawer host volumes", () => {
     expect(screen.getByText("No host volumes mounted.")).toBeInTheDocument();
   });
 });
+
+describe("VmDetailDrawer data volumes", () => {
+  it("shows block volume sizes and mount paths", async () => {
+    renderDrawer({
+      ...baseSandbox,
+      data_volumes: [{ size_gb: 8, mount: "/data" }],
+    });
+
+    expect(await screen.findByText("Data volumes")).toBeInTheDocument();
+    expect(screen.getByText("8 GiB")).toBeInTheDocument();
+    expect(screen.getByText("/data")).toBeInTheDocument();
+    expect(screen.getByText("block")).toBeInTheDocument();
+  });
+
+  it("shows a graceful empty state when no data volumes are attached", async () => {
+    renderDrawer(baseSandbox);
+
+    expect(await screen.findByText("Data volumes")).toBeInTheDocument();
+    expect(screen.getByText("No data volumes attached.")).toBeInTheDocument();
+  });
+});

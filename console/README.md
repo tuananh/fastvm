@@ -5,8 +5,9 @@ Web console for **fastvm**: a browser UI on top of the `fastvmd` HTTP/JSON API
 Tailwind CSS with HyperUI-style components, Headless UI, Heroicons, deterministic DiceBear avatars, TanStack Query, and [Vite+](https://viteplus.dev) (`vp`).
 
 The console talks to the daemon **same-origin**: a small Vite plugin proxies
-`/v1/*` (including WebSocket upgrades) to `fastvmd`'s unix socket in both dev and
-preview, so no CORS or direct socket access from the browser is needed. Themes:
+`/v1/*` (including WebSocket upgrades) to `fastvmd` in both dev and preview. The
+proxy prefers the daemon's mTLS TCP API and can fall back to the Unix socket, so
+there is no CORS or browser-side certificate handling. Themes:
 dark, light, or follow the system appearance via the switch next to the user
 avatar (persisted per browser).
 
@@ -14,7 +15,10 @@ avatar (persisted per browser).
 
 - Keycloak OIDC login (authorization code + PKCE), session persisted per tab.
 - Sandbox dashboard: state, live CPU and memory utilization, uptime, wake counts.
-- Create VMs from base-disk images; pause, deep sleep, resume and delete them.
+- Images menu: cached base images, manual pulls, removal, and Create VM with the
+  selected image preselected.
+- Create VMs from base-disk images with host-directory and writable block data volumes;
+  pause, deep sleep, resume and delete them.
 - Detail drawer with live utilization and the lifecycle event log.
 - In-browser exec terminal rendered with [ghostty-web](https://github.com/coder/ghostty-web)
   (Ghostty's VT100 parser compiled to WebAssembly) over a WebSocket PTY.
@@ -56,10 +60,15 @@ pnpm install            # or: pnpm exec vp install
 
 # 4. In another (root) shell, from the repo root: build and start the daemon
 make build
-sudo make start         # fastvmd -config hack/config.yaml, socket /run/fastvm/fastvm.sock
+sudo make start         # fastvmd -config hack/config.yaml, mTLS API on 127.0.0.1:8443
 make image              # build hack/Dockerfile.example -> demo:latest base disk
 
-# 5. Dev server (HMR)
+# 5. Dev server (HMR). By default the proxy targets
+#    https://127.0.0.1:8443 with /tmp/fastvm/certs/client.
+export FASTVM_HOST=https://127.0.0.1:8443
+export FASTVM_CERT_PATH=/tmp/fastvm/certs/client
+
+# 6. Start the dev server
 pnpm exec vp dev        # http://localhost:5173
 ```
 
@@ -78,31 +87,39 @@ All commands run in `console/` through the Vite+ CLI:
 | `pnpm exec vp check`   | format, lint, and typecheck                      |
 | `pnpm exec vp install` | install/refresh dependencies                     |
 
-## The unix-socket proxy
+## The API proxy
 
-`fastvmd` listens on a Unix socket (`FASTVM_SOCKET`, default
-`/run/fastvm/fastvm.sock`), which a browser cannot fetch directly. The plugin in
-[`vite-plugins/fastvm-proxy.ts`](vite-plugins/fastvm-proxy.ts) is registered via
-`configureServer` (dev) and `configurePreviewServer` (preview). It:
-
-- intercepts only request paths starting with `/v1/`;
-- forwards method, headers, and body to the daemon with
-  `http.request({ socketPath, path, method, headers })` and pipes the response
-  back unchanged;
-- tunnels WebSocket upgrades for `/v1/*` (the exec terminal) by connecting to
-  the same unix socket and raw-piping the upgraded client socket in both
-  directions; upgrades outside `/v1/` (e.g. Vite HMR) are left untouched;
-- answers plain HTTP with HTTP 502 and a JSON body
-  `{"error": "fastvmd unavailable: ..."}` when the socket is unreachable, and
-  destroys the client socket if the WebSocket upgrade cannot reach the daemon.
-
-The socket path is a **server-side** environment variable, not a `VITE_*` value:
+A browser cannot present a client certificate or connect to the daemon's Unix
+socket directly, so the Vite plugin in
+[`vite-plugins/fastvm-proxy.ts`](vite-plugins/fastvm-proxy.ts) proxies
+same-origin `/v1/*` traffic. By default it targets the mTLS TCP API at
+`https://127.0.0.1:8443` with client certificates from
+`/tmp/fastvm/certs/client`:
 
 ```sh
-FASTVM_SOCKET=/tmp/fastvm/custom.sock pnpm exec vp dev
+export FASTVM_HOST=https://127.0.0.1:8443        # optional: default
+export FASTVM_CERT_PATH=/tmp/fastvm/certs/client # optional: default
 ```
 
-Restart the dev server after changing `FASTVM_SOCKET`.
+`FASTVM_HOST` and `FASTVM_CERT_PATH` mirror the `fastvmctl` client settings.
+Set `FASTVM_SOCKET` to explicitly use the Unix socket instead
+(`/run/fastvm/fastvm.sock`).
+
+The plugin is registered via `configureServer` (dev) and
+`configurePreviewServer` (preview). It:
+
+- intercepts only request paths starting with `/v1/`;
+- forwards method, headers, and body to the daemon over HTTPS with the client
+  certificate, and pipes the response back unchanged;
+- tunnels WebSocket upgrades for `/v1/*` (the exec terminal) over the same
+  TLS connection and raw-pipes the upgraded client socket in both directions;
+  upgrades outside `/v1/` (e.g. Vite HMR) are left untouched;
+- answers plain HTTP with HTTP 502 and a JSON body
+  `{"error": "fastvmd unavailable at ...: ..."}` when the API is unreachable,
+  and destroys the client socket if the WebSocket upgrade cannot reach it.
+
+These are **server-side** environment variables, not `VITE_*` values. Restart
+the dev/preview server after changing them.
 
 ## OIDC configuration
 
@@ -128,6 +145,8 @@ Same-origin `/v1/*`, implemented in `src/lib/api.ts`:
 | `GET`    | `/v1/sandboxes/{ref}/stats`    | live utilization (polled every 2s)        |
 | `GET`    | `/v1/sandboxes/{ref}/shell/ws` | interactive PTY shell (WebSocket upgrade) |
 | `GET`    | `/v1/images`                   | base disk images                          |
+| `POST`   | `/v1/images/pull`              | pull an image and build a base disk       |
+| `DELETE` | `/v1/images?ref=...`           | remove an image and its tags              |
 | `GET`    | `/v1/events?limit=N`           | lifecycle event log (polled every 5s)     |
 | `POST`   | `/v1/sandboxes`                | create a sandbox                          |
 | `POST`   | `/v1/sandboxes/{ref}/sleep`    | `{ "deep": bool }`                        |

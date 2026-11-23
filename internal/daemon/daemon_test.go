@@ -315,6 +315,20 @@ func (a *fakeAgent) FileWrite(_ context.Context, path string, offset int64, mode
 	a.fileModes[path] = mode
 	return nil
 }
+func (a *fakeAgent) Stats(context.Context) (agent.GuestStats, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	total := a.memTotal
+	if total == 0 {
+		total = 512 << 20
+	}
+	avail := a.memAvail
+	if avail == 0 {
+		avail = total / 2
+	}
+	return agent.GuestStats{MemoryTotalBytes: total, MemoryAvailableBytes: avail, MemoryUsedBytes: total - avail}, nil
+}
+
 func (a *fakeAgent) Ports(context.Context) ([]int, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -1339,4 +1353,41 @@ func TestCopyGuestFile(t *testing.T) {
 		t.Fatalf("copied data mismatch: size=%d mode=%o", size, mode)
 	}
 	_ = h.d.Delete(context.Background(), sb.ID)
+}
+
+func TestRuntimeForStartsMonitor(t *testing.T) {
+	h := newHarness(t)
+	h.d.cfg.Lifecycle.IdleDetection.SampleInterval = config.Duration(10 * time.Millisecond)
+	sb := h.create(t)
+	h.drv.mu.Lock()
+	h.drv.vms[0].stats = types.VMStats{MemoryRSSBytes: 1234, VCPUTimeNS: 1000}
+	h.drv.mu.Unlock()
+
+	// Simulate a runtime created outside Create (e.g. adopted after restart).
+	h.d.mu.Lock()
+	old := h.d.runtimes[sb.ID]
+	delete(h.d.runtimes, sb.ID)
+	h.d.mu.Unlock()
+	old.stop()
+	time.Sleep(30 * time.Millisecond)
+
+	if _, err := h.d.runtimeFor(context.Background(), sb.ID); err != nil {
+		t.Fatalf("runtimeFor: %v", err)
+	}
+	rt := h.runtime(t, sb.ID)
+	rt.mu.Lock()
+	rt.vm = h.drv.vms[0]
+	rt.mu.Unlock()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		stats, err := h.d.Stats(context.Background(), sb.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stats.MemoryRSSBytes == 1234 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("monitor did not sample adopted runtime stats")
 }
