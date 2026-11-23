@@ -30,6 +30,33 @@ Longer-term ideas and research items. Check items off as they land.
   - Decide auth model (loopback-only? per-sandbox token? SSH tunnel?) and clipboard/security policy.
   - Wire it into the web console or expose a local port through the CLI.
 
+## Remote access
+
+- [ ] **SSH front door (`ssh ubuntu@fastvm.cloud`)**
+  - Let users reach a sandbox over standard SSH without knowing its host IP or
+    published port, e.g. `ssh ubuntu@fastvm.cloud` once a hosted domain exists.
+  - Decide the address model: one shared domain with username/key-based routing,
+    or per-sandbox subdomains such as `ubuntu@my-sandbox.fastvm.cloud`; wildcard
+    DNS (`*.fastvm.cloud`) is likely simpler and avoids ambiguity.
+  - Add a host-side SSH gateway that authenticates the client, resolves the
+    target sandbox, wakes it if necessary, and TCP-proxies to `sshd` on the
+    guest. Keep the guest port private.
+  - Guest prerequisites: `sshd` in the base image or via `user_data`,
+    authorized-key injection, host-key generation, and a stable `ubuntu` (or
+    configurable) user.
+  - Decide authentication: per-sandbox authorized keys, short-lived SSH
+    certificates from a host CA, or an OIDC/GitHub-backed gateway; consider
+    MFA, key rotation, and audit logs.
+  - Handle host-key verification and `known_hosts` cleanly, especially for
+    ephemeral sandboxes; a host CA and `@cert-authority` entry may be preferable
+    to trusting every generated host key.
+  - Add `fastvmctl ssh <sandbox>` as a convenience wrapper around the gateway,
+    and document manual `ProxyCommand`/`ProxyJump` usage.
+  - Cover wake-on-connect, idle timeouts, concurrent sessions, and cleanup when
+    the sandbox is deleted.
+  - Research prior art: GitHub Codespaces, Gitpod, Coder, Fly.io SSH, and
+    Tailscale SSH.
+
 ## Secrets
 
 - [ ] **Secret injection and proxying**
