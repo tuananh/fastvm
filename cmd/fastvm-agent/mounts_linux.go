@@ -8,7 +8,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -86,6 +88,7 @@ func ensureGuestFilesystems() {
 	}
 
 	mountCmdlineVolumes()
+	mountCmdlineDataVolumes()
 }
 
 // mountCmdlineVolumes mounts virtio-fs shares described by
@@ -128,6 +131,56 @@ func mountCmdlineVolumes() {
 		if err := unix.Mount(tag, guest, "virtiofs", flags, ""); err != nil &&
 			!errors.Is(err, unix.EBUSY) {
 			log.Printf("fastvm-agent: mount virtiofs %s at %s: %v", tag, guest, err)
+		}
+	}
+}
+
+// mountCmdlineDataVolumes mounts fastvm.data.<n>=<mount> block volumes. The
+// root disk is vda, so data volume n is vd(b+n).
+func mountCmdlineDataVolumes() {
+	data, err := os.ReadFile("/proc/cmdline")
+	if err != nil {
+		log.Printf("fastvm-agent: read cmdline for data volumes: %v", err)
+		return
+	}
+	for _, field := range strings.Fields(string(data)) {
+		spec, ok := strings.CutPrefix(field, "fastvm.data.")
+		if !ok {
+			continue
+		}
+		idxStr, mount, ok := strings.Cut(spec, "=")
+		if !ok {
+			continue
+		}
+		idx, err := strconv.Atoi(idxStr)
+		if err != nil || idx < 0 || idx > 25 {
+			log.Printf("fastvm-agent: invalid data volume spec %q", field)
+			continue
+		}
+		mount = filepath.Clean(mount)
+		if !filepath.IsAbs(mount) || mount == "/" {
+			log.Printf("fastvm-agent: invalid data volume mount %q", mount)
+			continue
+		}
+		dev := "/dev/vd" + string(rune('b'+idx))
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if _, err := os.Stat(dev); err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				log.Printf("fastvm-agent: data device %s did not appear", dev)
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		if err := os.MkdirAll(mount, 0o755); err != nil {
+			log.Printf("fastvm-agent: create data mountpoint %s: %v", mount, err)
+			continue
+		}
+		if err := unix.Mount(dev, mount, "ext4", 0, ""); err != nil &&
+			!errors.Is(err, unix.EBUSY) {
+			log.Printf("fastvm-agent: mount data volume %s at %s: %v", dev, mount, err)
 		}
 	}
 }

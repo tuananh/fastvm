@@ -76,6 +76,7 @@ type Sandbox struct {
 	AllowHosts     []string      `json:"allow_hosts,omitempty"`
 	Ports          []PortMapping `json:"ports,omitempty"`
 	Volumes        []Volume      `json:"volumes,omitempty"`
+	DataVolumes    []DataVolume  `json:"data_volumes,omitempty"`
 
 	// Network allocation.
 	NetnsPath string `json:"netns_path,omitempty"`
@@ -108,6 +109,14 @@ type Volume struct {
 	HostPath  string `json:"host_path"`
 	GuestPath string `json:"guest_path"`
 	ReadOnly  bool   `json:"read_only,omitempty"`
+}
+
+// DataVolume is a writable block volume cloned from a blank ext4 template.
+type DataVolume struct {
+	Name   string `json:"name,omitempty"`
+	SizeGB int    `json:"size_gb"`
+	Mount  string `json:"mount"`
+	Path   string `json:"path,omitempty"`
 }
 
 // Event is an append-only lifecycle/audit record.

@@ -759,3 +759,46 @@ func TestPullRejectsEmptyRef(t *testing.T) {
 		t.Fatalf("Pull empty ref error = %v", err)
 	}
 }
+
+func TestRootfsRequiredBytes(t *testing.T) {
+	root := t.TempDir()
+	f, err := os.Create(filepath.Join(root, "large.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(3 << 30); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := rootfsRequiredBytes(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got <= 3<<30 {
+		t.Fatalf("required bytes = %d, want > 3 GiB", got)
+	}
+}
+
+func TestIngestRejectsOversizedRootfs(t *testing.T) {
+	root := t.TempDir()
+	f, err := os.Create(filepath.Join(root, "large.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(2 << 30); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	b := newTestBuilder(t, filepath.Join(t.TempDir(), "images"))
+	_, err = b.Ingest(t.Context(), IngestSpec{RootfsDir: root, SizeGB: 1})
+	if err == nil {
+		t.Fatal("expected oversized rootfs to fail")
+	}
+	if !strings.Contains(err.Error(), "root_size_gb=1") || !strings.Contains(err.Error(), "requires") {
+		t.Fatalf("error = %v", err)
+	}
+}

@@ -91,8 +91,8 @@ func runNetworkWakeChild(t *testing.T) {
 	cfg.KernelPath = kernel
 	cfg.AgentPath = agentBin
 	cfg.Lifecycle.IdleWindow = config.Duration(30 * time.Second)
-	cfg.Wake.CoalesceWindow = config.Duration(10 * time.Millisecond)
-	cfg.Switch.Mode = "bridge"
+	cfg.Lifecycle.WakePolicy.CoalesceWindow = config.Duration(10 * time.Millisecond)
+	cfg.Network.DataPath.Mode = "bridge"
 
 	st, err := store.Open(filepath.Join(tmp, "state.db"))
 	if err != nil {

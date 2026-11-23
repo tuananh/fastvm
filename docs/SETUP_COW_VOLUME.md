@@ -55,7 +55,7 @@ Stop any running `fastvmd` that uses the same data dir/socket before continuing.
 | Setting | Value for this test | Why |
 |---|---|---|
 | `data_dir` | `/tmp/fastvm-cow/data` | **Must be on the mounted XFS**; otherwise fastvm silently uses `copy`. |
-| `volume.cow` | `reflink` | Already the default in `hack/config.yaml`; keep it. |
+| `storage.cow` | `reflink` | Already the default in `hack/config.yaml`; keep it. |
 | `socket_path` | `/tmp/fastvm-cow/fastvm.sock` | Optional; avoids clashing with another daemon on `/run`. |
 | `kernel_path` / `agent_path` | repo-relative (run from repo root) or absolute | Config paths are resolved from the daemon's working directory. |
 

@@ -213,11 +213,17 @@ working directory for the command and interactive shell. --auto-publish discover
 guest TCP listeners >= 1024 and publishes them 1:1 on 127.0.0.1 at the same
 host port. Privileged ports are skipped; use an explicit --publish/-p mapping for
 them. Occupied host ports are skipped and retried later; they are never
-reassigned.`,
+reassigned.
+
+--volume accepts a host directory share (/host[:guest][:ro]) or a writable
+block data volume (size=8GiB,mount=/data). Data volumes are cloned from a blank
+ext4 template and disable automatic sleep and snapshots.`,
 		Example: `  fastvmctl run --net --image alpine -- uname -a
   fastvmctl run --net -it --image alpine -- /bin/sh
-  fastvmctl run -f hack/codex.fvmfile
-  fastvmctl run -f hack/copilot.fvmfile -it --entrypoint bash
+  fastvmctl run -f examples/coding-agents/codex.fvmfile
+  fastvmctl run -f examples/coding-agents/copilot.fvmfile -it --entrypoint bash
+  fastvmctl run --image alpine --volume size=8GiB,mount=/data
+  fastvmctl run --image alpine --volume /host/project:/workspace
   fastvmctl run --image alpine --name agent --no-start
   fastvmctl run --from-snapshot original-vm-20261119-182000 --name copy-1
   fastvmctl run --name agent`,
@@ -265,6 +271,7 @@ reassigned.`,
 			var ports []types.PortMapping
 			var env map[string]string
 			var vols []types.Volume
+			var dataVols []types.DataVolume
 			noAutoSleep := false
 
 			if file != "" {
@@ -306,13 +313,15 @@ reassigned.`,
 					env = spec.Env
 				}
 				if changed("volume") {
-					extraVols, err := parseVolumes(volumes)
+					extraVols, extraData, err := parseVolumeFlags(volumes)
 					if err != nil {
 						return err
 					}
 					vols = mergeVolumes(spec.Volumes, extraVols)
+					dataVols = mergeDataVolumes(spec.DataVolumes, extraData)
 				} else {
 					vols = spec.Volumes
+					dataVols = append([]types.DataVolume(nil), spec.DataVolumes...)
 				}
 
 				if changed("net") {
@@ -375,7 +384,7 @@ reassigned.`,
 				if env, err = parseEnvs(envs); err != nil {
 					return err
 				}
-				if vols, err = parseVolumes(volumes); err != nil {
+				if vols, dataVols, err = parseVolumeFlags(volumes); err != nil {
 					return err
 				}
 				if entrypoint != "" {
@@ -398,7 +407,7 @@ reassigned.`,
 			body := map[string]any{
 				"name": name, "image": image, "workdir": workdir,
 				"vcpus": vcpus, "memory_mb": memory,
-				"ports": ports, "volumes": vols, "cmd": workload, "env": env,
+				"ports": ports, "volumes": vols, "data_volumes": dataVols, "cmd": workload, "env": env,
 				"no_auto_sleep": noAutoSleep, "start": !noStart,
 				"network_enabled": opts.enabled(), "allow_hosts": opts.allowHosts,
 				"user_data": userData, "auto_publish": opts.autoPublish,
@@ -436,7 +445,7 @@ reassigned.`,
 	f.IntVar(&memory, "memory", 0, "memory MiB (0 = default)")
 	f.StringArrayVar(&publishes, "publish", nil, "publish a port host:guest[/tcp|udp]")
 	f.StringArrayVar(&envs, "env", nil, "workload env K=V")
-	f.StringArrayVarP(&volumes, "volume", "v", nil, "mount a host directory: host[:guest][:ro]")
+	f.StringArrayVarP(&volumes, "volume", "v", nil, "mount a host directory (host[:guest][:ro]) or data volume (size=8GiB,mount=/data)")
 	f.BoolVarP(&detach, "detach", "d", false, "run the command in the background and print the sandbox ID")
 	f.BoolVar(&noStart, "no-start", false, "create without booting")
 	f.BoolVarP(&opts.interactive, "interactive", "i", false, "attach an interactive PTY")
@@ -541,6 +550,25 @@ func mergeEnvMaps(base, override map[string]string) map[string]string {
 	}
 	for k, v := range override {
 		out[k] = v
+	}
+	return out
+}
+
+// mergeDataVolumes appends CLI data volumes, replacing file volumes with the
+// same mount path so an explicit flag wins.
+func mergeDataVolumes(base, extra []types.DataVolume) []types.DataVolume {
+	out := append([]types.DataVolume(nil), base...)
+	index := make(map[string]int, len(out))
+	for i, v := range out {
+		index[v.Mount] = i
+	}
+	for _, v := range extra {
+		if i, ok := index[v.Mount]; ok {
+			out[i] = v
+		} else {
+			index[v.Mount] = len(out)
+			out = append(out, v)
+		}
 	}
 	return out
 }

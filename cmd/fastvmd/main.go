@@ -113,7 +113,7 @@ func runDaemon(ctx context.Context, opts daemonOptions) error {
 	}
 	volumes, err := volume.NewManager(volume.Options{
 		VolDir:     filepath.Join(cfg.DataDir, "volumes"),
-		DefaultCOW: cfg.Volume.COW,
+		DefaultCOW: cfg.Storage.COW,
 	})
 	if err != nil {
 		return fmt.Errorf("volume manager: %w", err)
@@ -121,15 +121,15 @@ func runDaemon(ctx context.Context, opts daemonOptions) error {
 	netOpts := network.DefaultOptions()
 	netOpts.Bridge = "fastvm0"
 	netOpts.SwitchMode = "bridge"
-	netOpts.Isolate = cfg.Switch.IsolateSandboxes
-	netOpts.WakeNotify = cfg.Switch.WakeNotify
-	netOpts.IgnorePorts = cfg.Idle.IgnorePorts
+	netOpts.Isolate = cfg.Network.DataPath.IsolateSandboxes
+	netOpts.WakeNotify = cfg.Network.DataPath.WakeNotify
+	netOpts.IgnorePorts = cfg.Lifecycle.IdleDetection.IgnorePorts
 
 	var (
 		sw     l2switch.Switch
 		netMgr network.Manager
 	)
-	if cfg.Switch.Mode == "" || cfg.Switch.Mode == "ebpf" {
+	if cfg.Network.DataPath.Mode == "" || cfg.Network.DataPath.Mode == "ebpf" {
 		// eBPF mode needs its switch uplink port before the program is loaded
 		// (the ifindex is written into the global config map).
 		ebpfOpts := netOpts
@@ -143,7 +143,7 @@ func runDaemon(ctx context.Context, opts daemonOptions) error {
 		} else if uplink, upErr := up.UplinkPort(); upErr != nil {
 			log.Warn("eBPF uplink unavailable; using Linux bridge", "err", upErr)
 			_ = em.Close()
-		} else if switchCfg, cfgErr := l2switch.FromConfig(cfg.Switch); cfgErr != nil {
+		} else if switchCfg, cfgErr := l2switch.FromConfig(cfg.Network.DataPath); cfgErr != nil {
 			log.Warn("invalid switch config; using Linux bridge", "err", cfgErr)
 			_ = em.Close()
 		} else {

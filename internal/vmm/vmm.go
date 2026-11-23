@@ -11,7 +11,8 @@ import (
 type BootConfig struct {
 	SandboxID   string
 	KernelPath  string
-	DiskPath    string // raw writable volume
+	DiskPath    string   // raw writable volume
+	DataDisks   []string // extra raw writable volumes (vdb, vdc, ...)
 	VCPUs       int
 	MemoryMB    int
 	TAPName     string // empty = no NIC

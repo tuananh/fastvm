@@ -132,6 +132,9 @@ func (d *Daemon) snapshotLocked(ctx context.Context, rt *runtime, outDir string)
 	if len(sb.Volumes) > 0 {
 		return fmt.Errorf("%w: snapshots with host volumes are not supported yet", manager.ErrConflict)
 	}
+	if len(sb.DataVolumes) > 0 {
+		return fmt.Errorf("%w: snapshots with data volumes are not supported yet", manager.ErrConflict)
+	}
 	if sb.VolumePath == "" {
 		return fmt.Errorf("%w: sandbox has no writable disk", manager.ErrConflict)
 	}
@@ -365,7 +368,7 @@ func (d *Daemon) restoreLocked(ctx context.Context, rt *runtime, cid uint32) err
 	sb.State = types.StateRunning
 	sb.LastActivityAt = now
 	sb.WakeCount = 0
-	rt.warmupUntil = now.Add(d.cfg.Idle.Warmup.D())
+	rt.warmupUntil = now.Add(d.cfg.Lifecycle.IdleDetection.Warmup.D())
 	rt.lastTick = now
 	rt.lastCPU = 0
 	rt.lastBlock = 0

@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"fastvm/internal/types"
@@ -376,6 +377,16 @@ func (b *FSBuilder) makeBaseDisk(ctx context.Context, req baseDiskRequest) (type
 		return disk, nil
 	}
 
+	required, err := rootfsRequiredBytes(rootfs)
+	if err != nil {
+		return types.BaseDisk{}, err
+	}
+	if required > sizeBytes {
+		return types.BaseDisk{}, fmt.Errorf(
+			"image rootfs requires %.1f GiB, root_size_gb=%d; increase storage.root_size_gb or use --size-gb",
+			float64(required)/(1<<30), sizeGB)
+	}
+
 	tmpDisk, err := os.CreateTemp(b.baseDir, ".fastvm-build-*"+diskExt)
 	if err != nil {
 		return types.BaseDisk{}, fmt.Errorf("image: create temp disk: %w", err)
@@ -727,4 +738,59 @@ func writeFileAtomic(path string, data []byte, perm fs.FileMode) error {
 	}
 	tmp = "" // renamed: nothing to clean up
 	return nil
+}
+
+// rootfsRequiredBytes estimates the ext4 capacity needed for rootfs contents.
+// It uses the larger of logical and allocated size per file (safe for sparse
+// files), counts inodes once, and leaves headroom for ext4 metadata and journal.
+func rootfsRequiredBytes(rootfs string) (int64, error) {
+	type inodeKey struct {
+		dev uint64
+		ino uint64
+	}
+	seen := make(map[inodeKey]struct{})
+	var dataBytes, inodes int64
+	err := filepath.WalkDir(rootfs, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := d.Info()
+		if err != nil {
+			return fmt.Errorf("image: stat %q: %w", path, err)
+		}
+		if path == rootfs {
+			return nil
+		}
+		if info.IsDir() {
+			inodes++
+			return nil
+		}
+
+		key := inodeKey{}
+		if st, ok := info.Sys().(*syscall.Stat_t); ok {
+			key = inodeKey{dev: uint64(st.Dev), ino: st.Ino}
+			if _, dup := seen[key]; dup {
+				return nil
+			}
+			seen[key] = struct{}{}
+		}
+		inodes++
+		if info.Mode().IsRegular() {
+			size := info.Size()
+			if key != (inodeKey{}) {
+				if st, ok := info.Sys().(*syscall.Stat_t); ok {
+					if allocated := int64(st.Blocks) * 512; allocated > size {
+						size = allocated
+					}
+				}
+			}
+			dataBytes += size
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	// ext4 metadata, journal, reserved blocks, and room for the workload.
+	return dataBytes + inodes*256 + dataBytes/10 + (256 << 20), nil
 }

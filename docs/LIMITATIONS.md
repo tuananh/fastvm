@@ -23,7 +23,7 @@ browser GUI, …) are in [DESIGN.md §4](DESIGN.md#4-non-goals-through-v01).
 - **Host-directory volumes are static and allowlisted.** `--volume
   host:guest[:ro]` / `volumes` in the API are attached at sandbox create time;
   there is no hotplug or dynamic attach/detach. Host paths must be absolute and
-  under `volumes.allowed_host_prefixes` (empty or absent denies all host mounts),
+  under `host_volumes.allowed_prefixes` (empty or absent denies all host mounts),
   `virtiofsd` should be sandboxed, and mounted host directories must be treated
   as trusted input. virtio-fs DAX is not supported by Cloud Hypervisor, so shares
   use a single queue.
@@ -48,11 +48,11 @@ browser GUI, …) are in [DESIGN.md §4](DESIGN.md#4-non-goals-through-v01).
 
 ## Behavior worth knowing
 
-- **eBPF switch topology.** `switch.mode: ebpf` (the default) uses one tc ingress
+- **eBPF switch topology.** `network.datapath.mode: ebpf` (the default) uses one tc ingress
   classifier per switch port: TAP ingress sees guest→host frames (redirected to
   the uplink port), uplink ingress sees host→guest frames (redirected into the
   TAP, emitting a ringbuf wake event if the sandbox is asleep). There is no
-  Linux bridge in this mode. `switch.mode: bridge` is the automatic fallback
+  Linux bridge in this mode. `network.datapath.mode: bridge` is the automatic fallback
   when eBPF cannot be loaded (no `CAP_BPF`/BTF/verifier support).
 - **Serial console.** Cloud Hypervisor runs with `--serial file=<serial.log>`,
   so the guest kernel console (`ttyS0`) and `FASTVM_BOOT_OK` are captured in

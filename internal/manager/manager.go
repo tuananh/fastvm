@@ -17,10 +17,11 @@ type CreateOptions struct {
 	MemoryMB    int
 	Ports       []types.PortMapping
 	Volumes     []types.Volume
-	Cmd         []string          // workload started after agent Ready (detached)
-	Env         map[string]string // workload environment
-	Workdir     string            // guest working directory for commands/shells
-	AutoPublish bool              // discover and publish guest TCP listeners
+	DataVolumes []types.DataVolume // per-sandbox writable block volumes
+	Cmd         []string           // workload started after agent Ready (detached)
+	Env         map[string]string  // workload environment
+	Workdir     string             // guest working directory for commands/shells
+	AutoPublish bool               // discover and publish guest TCP listeners
 	NoAutoSleep bool
 	// Start boots the VM immediately (default true when nil). A false value
 	// creates the sandbox in StateCreated so it can be started later.

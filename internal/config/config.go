@@ -42,34 +42,34 @@ type Config struct {
 	KernelPath string  `yaml:"kernel_path"`
 	AgentPath  string  `yaml:"agent_path"` // guest agent binary injected into base disks
 	InitPath   string  `yaml:"init_path"`  // optional host path to init script injected into base disks
-	Switch     Switch  `yaml:"switch"`
 	Network    Network `yaml:"network"`
 	API        API     `yaml:"api"`
 
 	Lifecycle Lifecycle `yaml:"lifecycle"`
-	Idle      Idle      `yaml:"idle"`
 	Memory    Memory    `yaml:"memory"`
-	Wake      Wake      `yaml:"wake"`
-	Volume    Volume    `yaml:"volume"`
+	Storage   Storage   `yaml:"storage"`
 	Defaults  Defaults  `yaml:"defaults"`
 
 	// VMM selects the VMM executable(s). Empty values use the built-in defaults.
 	VMM VMMConfig `yaml:"vmm"`
-	// Volumes configures host-directory virtio-fs mounts.
-	Volumes VolumeAllow `yaml:"volumes"`
+	// HostVolumes configures host-directory virtio-fs mounts.
+	HostVolumes HostVolumes `yaml:"host_volumes"`
 }
 
-// Lifecycle configures state transitions.
+// Lifecycle configures state transitions and the idle/wake policies that drive
+// them.
 type Lifecycle struct {
-	IdleWindow     Duration `yaml:"idle_window"`
-	PauseAfter     Duration `yaml:"pause_after"`
-	OffloadAfter   Duration `yaml:"offload_after"`
-	DestroyAfter   Duration `yaml:"destroy_after"`
-	OnWorkloadExit string   `yaml:"on_workload_exit"` // idle|pause|offload|stop
+	IdleWindow     Duration      `yaml:"idle_window"`
+	PauseAfter     Duration      `yaml:"pause_after"`
+	OffloadAfter   Duration      `yaml:"offload_after"`
+	DestroyAfter   Duration      `yaml:"destroy_after"`
+	OnWorkloadExit string        `yaml:"on_workload_exit"` // idle|pause|offload|stop
+	IdleDetection  IdleDetection `yaml:"idle_detection"`
+	WakePolicy     WakePolicy    `yaml:"wake_policy"`
 }
 
-// Idle configures the debounced idle predicate (docs/DESIGN.md §5.3).
-type Idle struct {
+// IdleDetection configures the debounced idle predicate (docs/DESIGN.md §5.3).
+type IdleDetection struct {
 	CPUThresholdPct float64  `yaml:"cpu_threshold_pct"`
 	CPUWakePct      float64  `yaml:"cpu_wake_pct"`
 	SampleInterval  Duration `yaml:"sample_interval"`
@@ -94,8 +94,8 @@ type API struct {
 	CertPath string `yaml:"cert_path"` // dir with ca.pem, cert.pem, key.pem
 }
 
-// Wake configures wake-on-network policy.
-type Wake struct {
+// WakePolicy configures wake-on-network policy.
+type WakePolicy struct {
 	TCP               bool     `yaml:"tcp"`
 	UDP               bool     `yaml:"udp"`
 	ICMP              bool     `yaml:"icmp"`
@@ -104,10 +104,10 @@ type Wake struct {
 	CoalesceWindow    Duration `yaml:"coalesce_window"`
 }
 
-// Volume configures CoW runtime volumes.
-type Volume struct {
+// Storage configures sandbox writable storage.
+type Storage struct {
 	COW              string `yaml:"cow"` // reflink|dm-thin|copy
-	SizeGB           int    `yaml:"size_gb"`
+	RootSizeGB       int    `yaml:"root_size_gb"`
 	DiscardOnDestroy bool   `yaml:"discard_on_destroy"`
 }
 
@@ -117,21 +117,22 @@ type VMMConfig struct {
 	Virtiofsd string `yaml:"virtiofsd"` // virtiofsd executable for volumes
 }
 
-// VolumeAllow restricts which host directories may be mounted as volumes.
-// An empty AllowedHostPrefixes denies all host-directory volumes.
-type VolumeAllow struct {
-	AllowedHostPrefixes []string `yaml:"allowed_host_prefixes"`
+// HostVolumes restricts which host directories may be mounted as volumes.
+// An empty AllowedPrefixes denies all host-directory volumes.
+type HostVolumes struct {
+	AllowedPrefixes []string `yaml:"allowed_prefixes"`
 }
 
-// Network configures guest-visible networking. Empty DNS/Search means the
-// daemon mirrors the host's /etc/resolv.conf, like Docker does for containers.
+// Network configures guest-visible networking and the host datapath. Empty
+// DNS/Search means the daemon mirrors the host's /etc/resolv.conf, like Docker.
 type Network struct {
-	DNS    []string `yaml:"dns"`
-	Search []string `yaml:"search"`
+	DNS      []string `yaml:"dns"`
+	Search   []string `yaml:"search"`
+	DataPath DataPath `yaml:"datapath"`
 }
 
-// Switch configures the L2 switch backend.
-type Switch struct {
+// DataPath configures the L2 forwarding datapath backend.
+type DataPath struct {
 	Mode             string `yaml:"mode"` // ebpf|bridge
 	IsolateSandboxes bool   `yaml:"isolate_sandboxes"`
 	WakeNotify       bool   `yaml:"wake_notify"`
@@ -158,28 +159,28 @@ func Default() *Config {
 			OffloadAfter:   Duration(10 * time.Minute),
 			DestroyAfter:   Duration(24 * time.Hour),
 			OnWorkloadExit: "idle",
+			IdleDetection: IdleDetection{
+				CPUThresholdPct: 1.0,
+				CPUWakePct:      5.0,
+				SampleInterval:  Duration(time.Second),
+				ExitHold:        Duration(3 * time.Second),
+				Warmup:          Duration(10 * time.Second),
+				BlockIOBytes:    65536,
+				KeepaliveAware:  true,
+				IgnorePorts:     nil,
+			},
+			WakePolicy: WakePolicy{
+				TCP:               true,
+				UDP:               true,
+				ICMP:              true,
+				MaxWakesPerMinute: 6,
+				CoalesceWindow:    Duration(100 * time.Millisecond),
+			},
 		},
-		Idle: Idle{
-			CPUThresholdPct: 1.0,
-			CPUWakePct:      5.0,
-			SampleInterval:  Duration(time.Second),
-			ExitHold:        Duration(3 * time.Second),
-			Warmup:          Duration(10 * time.Second),
-			BlockIOBytes:    65536,
-			KeepaliveAware:  true,
-			IgnorePorts:     nil,
-		},
-		Memory: Memory{OffloadMode: "file", EvictAbove: 0.90, ReserveMB: 1024},
-		Wake: Wake{
-			TCP:               true,
-			UDP:               true,
-			ICMP:              true,
-			MaxWakesPerMinute: 6,
-			CoalesceWindow:    Duration(100 * time.Millisecond),
-		},
-		Volume:   Volume{COW: "reflink", SizeGB: 8, DiscardOnDestroy: true},
+		Network:  Network{DataPath: DataPath{Mode: "ebpf", IsolateSandboxes: true, WakeNotify: true}},
+		Memory:   Memory{OffloadMode: "file", EvictAbove: 0.90, ReserveMB: 1024},
+		Storage:  Storage{COW: "reflink", RootSizeGB: 8, DiscardOnDestroy: true},
 		VMM:      VMMConfig{Binary: "cloud-hypervisor", Virtiofsd: "virtiofsd"},
-		Switch:   Switch{Mode: "ebpf", IsolateSandboxes: true, WakeNotify: true},
 		Defaults: Defaults{VCPUs: 2, MemoryMB: 512},
 	}
 }
@@ -218,10 +219,10 @@ func (c *Config) Validate() error {
 	default:
 		errs = append(errs, "lifecycle.on_workload_exit must be idle|pause|offload|stop")
 	}
-	if c.Idle.CPUThresholdPct < 0 || c.Idle.CPUThresholdPct > 100 {
+	if c.Lifecycle.IdleDetection.CPUThresholdPct < 0 || c.Lifecycle.IdleDetection.CPUThresholdPct > 100 {
 		errs = append(errs, "idle.cpu_threshold_pct must be in [0,100]")
 	}
-	if c.Idle.CPUWakePct < c.Idle.CPUThresholdPct {
+	if c.Lifecycle.IdleDetection.CPUWakePct < c.Lifecycle.IdleDetection.CPUThresholdPct {
 		errs = append(errs, "idle.cpu_wake_pct must be >= cpu_threshold_pct")
 	}
 	switch c.Memory.OffloadMode {
@@ -229,19 +230,19 @@ func (c *Config) Validate() error {
 	default:
 		errs = append(errs, "memory.offload_mode must be file|uffd|swap|never")
 	}
-	switch c.Volume.COW {
+	switch c.Storage.COW {
 	case "", "reflink", "dm-thin", "copy":
 	default:
-		errs = append(errs, "volume.cow must be reflink|dm-thin|copy")
+		errs = append(errs, "storage.cow must be reflink|dm-thin|copy")
 	}
-	switch c.Switch.Mode {
+	switch c.Network.DataPath.Mode {
 	case "", "ebpf", "bridge":
 	default:
-		errs = append(errs, "switch.mode must be ebpf|bridge")
+		errs = append(errs, "network.datapath.mode must be ebpf|bridge")
 	}
-	for _, prefix := range c.Volumes.AllowedHostPrefixes {
+	for _, prefix := range c.HostVolumes.AllowedPrefixes {
 		if !filepath.IsAbs(prefix) || filepath.Clean(prefix) != prefix {
-			errs = append(errs, "volumes.allowed_host_prefixes entries must be absolute clean paths")
+			errs = append(errs, "host_volumes.allowed_prefixes entries must be absolute clean paths")
 			break
 		}
 	}

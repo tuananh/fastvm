@@ -33,7 +33,7 @@ const (
 	ModeBridge Mode = "bridge"
 )
 
-// ParseMode validates a configured switch.mode value. Empty means the eBPF
+// ParseMode validates a configured network.datapath.mode value. Empty means the eBPF
 // default (docs/DESIGN.md §5.4).
 func ParseMode(s string) (Mode, error) {
 	switch s {
@@ -101,7 +101,7 @@ type Config struct {
 }
 
 // FromConfig derives a switch Config from the daemon config.
-func FromConfig(c config.Switch) (Config, error) {
+func FromConfig(c config.DataPath) (Config, error) {
 	mode, err := ParseMode(c.Mode)
 	if err != nil {
 		return Config{}, err
@@ -114,16 +114,16 @@ func FromConfig(c config.Switch) (Config, error) {
 }
 
 // UnsupportedError means the requested backend is unavailable in this
-// environment; the daemon should fall back to switch.mode=bridge.
+// environment; the daemon should fall back to network.datapath.mode=bridge.
 type UnsupportedError struct {
 	Err error
 }
 
 func (e *UnsupportedError) Error() string {
 	if e.Err == nil {
-		return "switch: ebpf backend unsupported; use switch.mode=bridge"
+		return "switch: ebpf backend unsupported; use network.datapath.mode=bridge"
 	}
-	return "switch: ebpf backend unsupported: " + e.Err.Error() + "; use switch.mode=bridge"
+	return "switch: ebpf backend unsupported: " + e.Err.Error() + "; use network.datapath.mode=bridge"
 }
 
 func (e *UnsupportedError) Unwrap() error { return e.Err }

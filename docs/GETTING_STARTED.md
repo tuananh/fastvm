@@ -57,9 +57,9 @@ socket_path: /run/fastvm/fastvm.sock
 kernel_path: test/e2e/assets/vmlinux.bin
 agent_path: bin/fastvm-agent
 vmm: {binary: cloud-hypervisor, virtiofsd: virtiofsd}
-volumes: {allowed_host_prefixes: []}   # empty = deny all host-directory mounts
+host_volumes: {allowed_prefixes: []}   # empty = deny all host-directory mounts
 lifecycle: {idle_window: 60s, pause_after: 10m, offload_after: 30m, destroy_after: 0s}
-# ... see the file for the idle/memory/wake/switch sections
+# ... see the file for the lifecycle/memory/network sections
 ```
 
 Its relative `kernel_path`/`agent_path` are resolved from the directory you
@@ -92,7 +92,7 @@ What happens:
 
 - The daemon creates `$DATA_DIR` (`/tmp/fastvm-demo-data`), writes
   `/run/fastvm/fastvm.sock` (mode 0600) and serves the HTTP/JSON API.
-- With `switch.mode: ebpf` (the default) the daemon loads the eBPF L2 switch.
+- With `network.datapath.mode: ebpf` (the default) the daemon loads the eBPF L2 switch.
   TAP ingress sees guest→host frames and redirects them to the uplink veth;
   uplink ingress sees host→guest frames, redirects them into the sleeping
   sandbox's TAP and emits a ringbuf wake event. Without `CAP_BPF`/BTF it logs
@@ -163,7 +163,10 @@ credentials are read from
 the Docker config keychain (`~/.docker/config.json`), so private registries work
 without the Docker daemon.
 
-Optional flag: `--size-gb N` (base disk size, default 8 GiB). Remove an image
+Optional flag: `--size-gb N` (base disk size; defaults to `storage.root_size_gb`,
+8 GiB). To shrink the boot disk, set `storage.root_size_gb: 2`, restart the daemon,
+and rebuild images; existing cached images keep their old size until re-pulled.
+Remove an image
 once no sandbox references it; `--force` overrides the reference check and
 deletes the disk plus every tag pointing at its digest:
 
@@ -216,12 +219,12 @@ with `fastvmctl get`; see [auto-publishing ports](AUTO_PUBLISH.md).
 
 Host paths can be mounted into the guest at create time (read-write by default,
 read-only with `:ro`). The host path must be absolute and under one of the
-prefixes in `volumes.allowed_host_prefixes` — the demo config ships with an empty
+prefixes in `host_volumes.allowed_prefixes` — the demo config ships with an empty
 list, which **denies all host mounts**; add e.g. `/tmp` to try it:
 
 ```yaml
-volumes:
-  allowed_host_prefixes: [/tmp]
+host_volumes:
+  allowed_prefixes: [/tmp]
 ```
 
 ```sh
@@ -457,22 +460,24 @@ starting point; full schema is in `internal/config/config.go`.
 | `agent_path` | `bin/fastvm-agent` | guest agent injected into images |
 | `vmm.binary` | `cloud-hypervisor` | VMM executable (absolute path or name; falls back to `cloud-hypervisor-static`, override with `FASTVM_CLOUD_HYPERVISOR`) |
 | `vmm.virtiofsd` | `virtiofsd` | virtio-fs server for host volumes (falls back to `/usr/lib/virtiofsd`; override with `FASTVM_VIRTIOFSD`) |
-| `volumes.allowed_host_prefixes` | `[]` | absolute host paths allowed as `--volume` shares; empty/absent denies all host mounts (distinct from `volume.*`, which configures CoW runtime volumes) |
+| `host_volumes.allowed_prefixes` | `[]` | absolute host paths allowed as `--volume` shares; empty/absent denies all host mounts (distinct from `storage.*`, which configures writable storage) |
 | `init_path` | empty | custom `/init`; empty uses the built-in script |
 | `lifecycle.idle_window` | `60s` | Running→Idle debounce |
 | `lifecycle.pause_after` | `10m` | Idle→Paused |
 | `lifecycle.offload_after` | `30m` | Paused→Dormant |
 | `lifecycle.destroy_after` | `0s` (demo) / `24h` | auto-delete (0 = never) |
 | `lifecycle.on_workload_exit` | `idle` | idle / pause / offload / stop |
-| `idle.cpu_threshold_pct` | `1.0` | CPU must be below this to sleep (veto) |
-| `idle.cpu_wake_pct` | `5.0` | CPU spike that returns Idle→Running |
-| `idle.block_io_bytes` | `65536` | block I/O budget per window |
-| `idle.ignore_ports` | `[]` | ports that never count/wake (host probes) |
+| `lifecycle.idle_detection.cpu_threshold_pct` | `1.0` | CPU must be below this to sleep (veto) |
+| `lifecycle.idle_detection.cpu_wake_pct` | `5.0` | CPU spike that returns Idle→Running |
+| `lifecycle.idle_detection.block_io_bytes` | `65536` | block I/O budget per window |
+| `lifecycle.idle_detection.ignore_ports` | `[]` | ports that never count/wake (host probes) |
 | `memory.offload_mode` | `file` | `file` or `never` (uffd/swap not implemented) |
-| `wake.max_wakes_per_minute` | `6` | scan protection per sandbox |
-| `wake.coalesce_window` | `100ms` | burst coalescing |
-| `volume.cow` | `reflink` | `reflink` on XFS/btrfs, `copy` fallback |
-| `switch.mode` | `ebpf` | `ebpf` (default; automatic `bridge` fallback without CAP_BPF) or `bridge` |
+| `lifecycle.wake_policy.max_wakes_per_minute` | `6` | scan protection per sandbox |
+| `lifecycle.wake_policy.coalesce_window` | `100ms` | burst coalescing |
+| `storage.cow` | `reflink` | `reflink` on XFS/btrfs, `copy` fallback |
+| `storage.root_size_gb` | `1` | base/root disk size used for new image builds; images that need more fail (existing images must be re-pulled) |
+| `storage.discard_on_destroy` | `true` | remove the writable volume with the sandbox |
+| `network.datapath.mode` | `ebpf` | `ebpf` (default; automatic `bridge` fallback without CAP_BPF) or `bridge` |
 | `network.dns` | host resolvers | nameserver overrides (non-loopback IPv4); empty mirrors the host `/etc/resolv.conf`, like Docker |
 | `network.search` | host search domains | search-domain overrides; empty mirrors the host |
 
@@ -542,7 +547,7 @@ fallback and uses the Linux bridge.
 | `operation not permitted` creating TAP/bridge/nft | The daemon needs `CAP_NET_ADMIN`: run `fastvmd` as root. |
 | `cloud-hypervisor: executable file not found in $PATH` | Install Cloud Hypervisor v54+ (or `cloud-hypervisor-static`) and make sure it is on the daemon's `PATH`, or set `vmm.binary` / `FASTVM_CLOUD_HYPERVISOR` to its absolute path. |
 | `virtiofsd: executable file not found` | Install virtiofsd ≥ 1.10 (the distro package usually installs `/usr/lib/virtiofsd`; the daemon falls back to it) or set `vmm.virtiofsd` / `FASTVM_VIRTIOFSD`. Only needed for host-directory volumes. |
-| `volume N: host_path "..." is outside the allowed host prefixes` | Add the absolute host path prefix to `volumes.allowed_host_prefixes` in the daemon config (empty denies all host mounts), or drop the `--volume` flag. |
+| `volume N: host_path "..." is outside the allowed host prefixes` | Add the absolute host path prefix to `host_volumes.allowed_prefixes` in the daemon config (empty denies all host mounts), or drop the `--volume` flag. |
 | A dormant sandbox fails to restore after upgrading | The Cloud Hypervisor snapshot format is version-specific: restore with the same CH version (and CPU/disk/vsock paths). Delete the sandbox or re-create it after a VMM upgrade. |
 | Boot fails / sandbox goes `Failed` | Check `/dev/kvm` permissions, `kernel_path`, and the VMM stderr tail in the event plus `sandboxes/<id>/serial.log`. |
 | `image not found` on `run` | `fastvm image ls` to see tags; pull or ingest first. |
@@ -551,7 +556,7 @@ fallback and uses the Linux bridge.
 | `fastvm shell`: `unknown op "shell"` | The image was built with an older guest agent. Rebuild the base disk and recreate the sandbox. |
 | A guest command (e.g. `claude --help`) hangs with no output | The image predates guest-entropy seeding: `getrandom()` blocks until the microVM CRNG initializes. Rebuild the base disk and recreate the sandbox. |
 | Build on an old guest kernel fails to mount ext4 | Host `mke2fs` defaults can enable newer features; pass a matching kernel or pin features in the builder. |
-| Daemon log says `eBPF switch unavailable; using Linux bridge` | Expected without `CAP_BPF`/BTF/verifier support; the bridge + AF_PACKET path is the fallback. Set `switch.mode: bridge` to silence the attempt. |
+| Daemon log says `eBPF switch unavailable; using Linux bridge` | Expected without `CAP_BPF`/BTF/verifier support; the bridge + AF_PACKET path is the fallback. Set `network.datapath.mode: bridge` to silence the attempt. |
 | `--publish` port refuses connections on localhost | The guest server must listen on IPv4 (`0.0.0.0`). Busybox `httpd -p 80` binds IPv6-only; use `-p 0.0.0.0:80`. |
 | Daemon won't start, `state.db` timeout | Another `fastvmd` is using the same `data_dir` (bbolt exclusive lock). Stop it first. |
 | Sandbox never becomes Idle | Check `fastvm events` for the Idle reason (`quiet for ...`) and whether it was created with `--no-auto-sleep`. |

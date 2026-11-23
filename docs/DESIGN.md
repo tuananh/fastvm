@@ -239,7 +239,7 @@ This section is the product. Everything else exists to make it true.
 | `Creating → Starting` | base disk resolved, CoW volume cloned, switch port up, VMM spawned | failure → `Failed` |
 | `Starting → Running` | guest agent Ready over vsock | boot timeout → `Failed` |
 | `Running → Idle` | the idle predicate holds for `lifecycle.idle_window` (default 30 s) | workload exit also → `Idle` immediately |
-| `Idle → Running` | qualifying activity, or CPU ≥ `idle.cpu_wake_pct` for `idle.exit_hold` | resets the debounce |
+| `Idle → Running` | qualifying activity, or CPU ≥ `lifecycle.idle_detection.cpu_wake_pct` for `lifecycle.idle_detection.exit_hold` | resets the debounce |
 | `Idle → Paused` | idle for `pause_after` (default 2 m) **and** sleep barrier clear | manual `fastvm pause` skips the wait; switch port marked asleep (wake notifications armed) before pausing |
 | `Paused → Running` | wake trigger (inbound frame, API) | resume vCPUs; the queued frames are consumed by the guest |
 | `Paused → Dormant` | `offload_after` idle (default 10 m) **or** host memory pressure **or** manual `--offload` | Cloud Hypervisor snapshot the paused VM, stop the VMM, and restore it paused from the snapshot (`--restore`); restore is tens of ms and not user-facing |
@@ -265,12 +265,12 @@ useful work). All four must be quiet for the whole window.
 | Pure ACKs and TCP keepalives | eBPF switch (TCP flags/len) | No — an idle-but-open connection must not pin a sandbox awake |
 | exec session attached, API operation, explicit `fastvm touch` | lifecycle API / guest agent | **Yes** |
 | Workload start/exit events | guest agent | **Yes** (exit sets `workload_finished` and may move straight to `Idle`) |
-| Block-device I/O | VMM block stats / host I/O counters | **Yes** when ≥ `idle.block_io_bytes` within the window |
-| Guest CPU utilization | VMM per-vCPU / host CPU accounting | **Vetoes** idleness while above `idle.cpu_threshold_pct`; does not reset the window by itself |
+| Block-device I/O | VMM block stats / host I/O counters | **Yes** when ≥ `lifecycle.idle_detection.block_io_bytes` within the window |
+| Guest CPU utilization | VMM per-vCPU / host CPU accounting | **Vetoes** idleness while above `lifecycle.idle_detection.cpu_threshold_pct`; does not reset the window by itself |
 
 **Not activity:** ARP/NDP, broadcast/multicast noise, pure ACKs and keepalives,
 switch control events, guest stdout/stderr writes (a server that logs must still
-be able to sleep), and frames on `idle.ignore_ports` (intended for host-side
+be able to sleep), and frames on `lifecycle.idle_detection.ignore_ports` (intended for host-side
 probes; by default health-check traffic **does** count and keeps a sandbox
 warm).
 
@@ -280,7 +280,7 @@ continuously for `lifecycle.idle_window` (default 30 s):
 1. **No qualifying activity:** `now - last_activity_at ≥ idle_window` for
    network, exec/API, and block I/O;
 2. **CPU quiet:** utilization averaged over the window (1 s samples) stays below
-   `idle.cpu_threshold_pct` (default **1%** of the sandbox's total vCPU
+   `lifecycle.idle_detection.cpu_threshold_pct` (default **1%** of the sandbox's total vCPU
    capacity);
 3. **No interactive work:** no exec session attached, no in-flight frame
    delivery, and the sleep barrier is clear;
@@ -289,18 +289,18 @@ continuously for `lifecycle.idle_window` (default 30 s):
 
 The window is a **debounce**: any qualifying activity resets it, so one request
 or a burst of frames restarts the countdown. `Idle → Running` happens on any
-qualifying activity, or when windowed CPU stays above `idle.cpu_wake_pct`
-(default 5%) for `idle.exit_hold` (default 3 s). CPU only prevents sleep — it
+qualifying activity, or when windowed CPU stays above `lifecycle.idle_detection.cpu_wake_pct`
+(default 5%) for `lifecycle.idle_detection.exit_hold` (default 3 s). CPU only prevents sleep — it
 never wakes a sleeping sandbox.
 
 **Measurement details:**
 
-- CPU is sampled every `idle.sample_interval` (default 1 s) from the VMM's
+- CPU is sampled every `lifecycle.idle_detection.sample_interval` (default 1 s) from the VMM's
   per-vCPU accounting, normalized by total vCPU capacity, so 1% means the same
   thing for a 1-vCPU and an 8-vCPU sandbox.
 - `last_activity_at` and the current predicate inputs are persisted with the
   sandbox record; a daemon restart does not reset sleep timers.
-- A freshly started sandbox is exempt for `idle.warmup` (default 10 s) after
+- A freshly started sandbox is exempt for `lifecycle.idle_detection.warmup` (default 10 s) after
   agent Ready, so boot/startup traffic is not mistaken for background noise.
 - Every `Running → Idle` transition records its **reason** ("no network 31 s,
   cpu 0.4%, block io 0"), exposed via `fastvm events`, `fastvm ls`, and
@@ -317,34 +317,35 @@ lifecycle:
   offload_after: 10m      # Paused -> Dormant (0 disables)
   destroy_after: 24h      # sleeping/idle lifetime -> Stopped (0 = never)
   on_workload_exit: idle  # idle | pause | offload | stop
-idle:
-  cpu_threshold_pct: 1.0  # windowed CPU below this permits Idle (required, not sufficient)
-  cpu_wake_pct: 5.0       # windowed CPU above this for exit_hold leaves Idle
-  sample_interval: 1s
-  exit_hold: 3s
-  warmup: 10s
-  block_io_bytes: 65536   # qualifying block I/O within idle_window
-  keepalive_aware: true   # pure ACKs/TCP keepalives do not count
-  ignore_ports: []        # frames here never count and never wake (host-side probes)
+  idle_detection:
+    cpu_threshold_pct: 1.0  # windowed CPU below this permits Idle (required, not sufficient)
+    cpu_wake_pct: 5.0       # windowed CPU above this for exit_hold leaves Idle
+    sample_interval: 1s
+    exit_hold: 3s
+    warmup: 10s
+    block_io_bytes: 65536   # qualifying block I/O within idle_window
+    keepalive_aware: true   # pure ACKs/TCP keepalives do not count
+    ignore_ports: []        # frames here never count and never wake (host-side probes)
+  wake_policy:
+    tcp: true
+    udp: true               # packet-level trigger; delivery best-effort
+    icmp: true
+    allowed_ports: []       # empty = any unicast destination port
+    max_wakes_per_minute: 6 # per sandbox; scan/wake-storm protection
+    coalesce_window: 100ms  # burst of frames -> one transition
 memory:
   offload_mode: file      # file (paused memory file, mmap) | uffd (optional) | swap | never
   evict_above: 0.90       # host RAM used % -> offload the oldest Paused sandboxes
   reserve_mb: 1024        # never schedule below this
-wake:
-  tcp: true
-  udp: true               # packet-level trigger; delivery best-effort
-  icmp: true
-  allowed_ports: []       # empty = any unicast destination port
-  max_wakes_per_minute: 6 # per sandbox; scan/wake-storm protection
-  coalesce_window: 100ms  # burst of frames -> one transition
-volume:
+storage:
   cow: reflink            # reflink (default) | dm-thin | copy
-  size: 8GiB
+  root_size_gb: 8
   discard_on_destroy: true
-switch:
-  mode: ebpf              # ebpf (default) | bridge (dev/CI fallback)
-  isolate_sandboxes: true
-  wake_notify: true
+network:
+  datapath:
+    mode: ebpf              # ebpf (default) | bridge (dev/CI fallback)
+    isolate_sandboxes: true
+    wake_notify: true
 ```
 
 ### 5.5 Wake-on-network semantics (v0.1 contract)
@@ -384,7 +385,7 @@ writes guest packets into the VM.
   that port, and *still redirects the frame into the port* toward the TAP. The
   dispatcher coalesces the burst into one transition (`coalesce_window`), so
   the frame is already in the queue by the time vCPUs resume, or is delivered
-  as the paused device backend drains the TAP. In `switch.mode=bridge`, a
+  as the paused device backend drains the TAP. In `network.datapath.mode=bridge`, a
   passive AF_PACKET tap supplies the same event.
 - **Resume.** `Resuming` resumes vCPUs (`PUT /api/v1/vm.resume`); the guest's
   network stack consumes the queued frames in order and replies normally. The
@@ -494,10 +495,10 @@ actual VMM process on startup.
 | **Wake dispatcher (`internal/wake`)** | Consumes wake notifications from the eBPF switch (AF_PACKET tap fallback in bridge mode); coalesces bursts, rate-limits scans, marks `wake_no_response`. It never holds, injects, or reorders frames. |
 | **eBPF L2 switch (`internal/switch`)** | Per-host tc `clsact` eBPF programs + BPF maps: static MAC→port table, `bpf_redirect` between sandbox TAPs and the uplink, per-port MAC anti-spoofing, default sandbox isolation, per-port byte/packet counters, and a ringbuf wake-event channel. Loaded via `cilium/ebpf`; bridge-mode fallback for dev/CI. |
 | **Image builder (`internal/image`)** | OCI registry pull → unpacked rootfs → ext4 base disk (guest agent + init injected); content-addressed cache; `fastvm image pull`/`image ls`. |
-| **Volumes (`internal/volume`)** | Base-disk store (read-only, content-addressed) and per-sandbox CoW runtime volumes (reflink default, dm-thin fallback); clone, attach, discard, GC, refcounts. Host-directory volumes are validated against `volumes.allowed_host_prefixes` and attached at create time (virtio-fs, static). |
+| **Volumes (`internal/volume`)** | Base-disk store (read-only, content-addressed) and per-sandbox CoW runtime volumes (reflink default, dm-thin fallback); clone, attach, discard, GC, refcounts. Host-directory volumes are validated against `host_volumes.allowed_prefixes` and attached at create time (virtio-fs, static). |
 | **Network (`internal/network`)** | Per-sandbox TAP as switch port + shared `fvup`/`fvuplink` uplink veth, nftables NAT/DNAT for published ports, static neighbor entries, MAC/IP allocation. |
 | **Snapshot & restore (`internal/snapshot`)** | Cloud Hypervisor snapshots (config + memory + device state) of the paused VM, restore with `--restore` (starts paused; file-backed memory, kernel demand paging), virtiofsd restart before restore, restore-time measurement, fsync/GC, disk budget. CH's `ondemand`/`copyonwrite` (uffd) restore modes are a later optimisation. |
-| **Guest agent (`guest/`)** | Static Go binary in the rootfs over vsock (Cloud Hypervisor virtio-vsock; the guest/host `CONNECT <port>` protocol is unchanged): Ready handshake, exec, signals, workload lifecycle events, stdout/stderr pump (logs, not activity), per-boot `/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf` writer, `touch`, `workload_busy` advisory, clock/NTP note after resume, reconnect after vsock reset. |
+| **Guest agent (`cmd/fastvm-agent`)** | Static Go binary in the rootfs over vsock (Cloud Hypervisor virtio-vsock; the guest/host `CONNECT <port>` protocol is unchanged): Ready handshake, exec, signals, workload lifecycle events, stdout/stderr pump (logs, not activity), per-boot `/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf` writer, `touch`, `workload_busy` advisory, clock/NTP note after resume, reconnect after vsock reset. |
 | **Image manager (`internal/image`)** | Resolve/pull OCI images, unpack rootfs for the base-disk builder, and resolve base-disk digests for volumes. Kernel is pinned per host config, not taken from the image. |
 | **Store (`internal/store`)** | bbolt: sandbox records, desired state, activity timestamps, memory-image metadata, events index. |
 | **CLI (`cmd/fastvm`)** | Thin client: `run, ls, exec, shell, logs, pause, offload, resume, rm, events, host`. |
@@ -626,7 +627,7 @@ the CoW volume and memory image; drop the base-disk reference; delete record.
 - **Host-directory volumes (virtio-fs).** A sandbox can carry
   `volumes: [{host_path, guest_path, read_only}]` (CLI `--volume
   host:guest[:ro]`, API `volumes`). Each `host_path` must be absolute and under
-  `volumes.allowed_host_prefixes` (empty/absent = deny all), and is served by a
+  `host_volumes.allowed_prefixes` (empty/absent = deny all), and is served by a
   per-share `virtiofsd` process at `<sandbox>/fs-<n>.sock`; CH gets a `--fs
   tag=fastvm<n>,socket=...` device and `--memory ...,shared=on`. The daemon
   appends `fastvm.volume.<n>=fastvm<n>:<guest_path>:<ro|rw>` to the kernel
@@ -674,7 +675,7 @@ the CoW volume and memory image; drop the base-disk reference; delete record.
   host→TAP path resolving while a guest sleeps; ARP/NDP never wakes.
 - **Activity counters:** per-port rx/tx bytes/packets/drops exported from BPF
   maps and fed into the lifecycle activity model.
-- **Fallback/rollback:** `switch.mode=bridge` keeps a Linux-bridge + AF_PACKET
+- **Fallback/rollback:** `network.datapath.mode=bridge` keeps a Linux-bridge + AF_PACKET
   path for dev/CI hosts without the required kernel/BTF, and as a rollback
   mode; the AF_PACKET dispatcher then supplies wake notifications.
 - **Kernel requirements:** tc `clsact` eBPF, ringbuf, and BTF (documented
@@ -711,7 +712,7 @@ the CoW volume and memory image; drop the base-disk reference; delete record.
 | 13 | Runtime volumes | **CoW clone: reflink by default, dm-thin fallback** | Guest overlayfs; full copy; qcow2 | Millisecond clones, block sharing, raw devices Cloud Hypervisor accepts | dm-thin default if reflink filesystems are not guaranteed |
 | 14 | Image pull | **OCI registry → rootfs → ext4 base disk** | Docker CLI/daemon; BuildKit; container2vm-style converters | Direct registry pull removes Docker dependencies; fastvm owns rootfs→disk conversion | Registry auth/proxy policy; multi-arch later |
 | 15 | L2 switch | **tc `clsact` eBPF programs + BPF maps** | Linux bridge; OVS; XDP-native-only | Redirect, isolation, counters, and wake events with one data-plane program; generic tc works on veths | XDP-native optimization; per-host program reload/rollback |
-| 16 | Host-directory volumes | **virtio-fs: CH `--fs` + one virtiofsd per share; absolute host paths allowlisted via `volumes.allowed_host_prefixes`; static at create** | 9p; copy-in/copy-out; overlayfs | Native read-write host shares without copying; persists across pause/dormant; no DAX/hotplug (single queue) | Hotplug/DAX if CH support improves; virtiofsd sandboxing in M7 |
+| 16 | Host-directory volumes | **virtio-fs: CH `--fs` + one virtiofsd per share; absolute host paths allowlisted via `host_volumes.allowed_prefixes`; static at create** | 9p; copy-in/copy-out; overlayfs | Native read-write host shares without copying; persists across pause/dormant; no DAX/hotplug (single queue) | Hotplug/DAX if CH support improves; virtiofsd sandboxing in M7 |
 
 ### 6.8 Repository layout (created in M0)
 
@@ -730,7 +731,7 @@ internal/snapshot/    Cloud Hypervisor snapshot dir, restore, gc
 internal/image/       OCI pull/unpack, agent injection
 internal/store/       bbolt
 internal/agentproto/  vsock wire protocol
-guest/                fastvm-agent
+cmd/fastvm-agent/     fastvm-agent
 docs/adr/             decision records
 test/e2e/             KVM-gated end-to-end tests (Cloud Hypervisor)
 test/perf/            benchmarks with recorded baselines
@@ -779,7 +780,7 @@ tc `clsact` programs + BPF maps (MAC→port table, per-port asleep state,
 counters, ringbuf wake events); loader via `cilium/ebpf` with bpf2go; static
 MAC/IP assignment; per-port source MAC/IP anti-spoofing; default
 sandbox↔sandbox isolation; uplink port; replaces the Linux bridge on supported
-kernels; `switch.mode=bridge` fallback retained; privileged BPF tests in CI;
+kernels; `network.datapath.mode=bridge` fallback retained; privileged BPF tests in CI;
 throughput benchmark vs bridge.
 **Exit:** `curl` and `ping` work through the switch; sandbox↔sandbox frames are
 dropped and counted; a spoofed source MAC is dropped; per-port counters match a
@@ -907,7 +908,7 @@ A reproducible demo on one KVM host, no manual lifecycle steps:
 7. The batch job finishes, pauses, becomes dormant, and its output/state is
    still there when woken.
 8. The eBPF switch enforces default sandbox isolation, drops spoofed MACs,
-   exposes per-port counters, and delivers wake events; `switch.mode=bridge`
+   exposes per-port counters, and delivers wake events; `network.datapath.mode=bridge`
    passes the same e2e suite.
 9. Kill `fastvmd` at random points (idle, mid-pause, mid-offload, mid-wake):
    restart reconciles; no orphan VMMs; dormant sandboxes recover or fail
@@ -924,7 +925,7 @@ A reproducible demo on one KVM host, no manual lifecycle steps:
 | Risk | Impact | Mitigation |
 |------|--------|-----------|
 | **No KVM on the dev box** (currently `/dev/kvm` is absent even though AMD-V and the kvm modules are loaded) | Blocks all real testing | Confirm nested-virt/device passthrough or designate a remote KVM host; KVM-gated CI job with QEMU/TCG functional fallback; perf gates only on KVM |
-| eBPF kernel/BTF portability and verifier limits | Switch unavailable on some hosts, dev friction | Documented minimum kernel; `switch.mode=bridge` fallback; CI kernel matrix; clear startup error with the fallback hint |
+| eBPF kernel/BTF portability and verifier limits | Switch unavailable on some hosts, dev friction | Documented minimum kernel; `network.datapath.mode=bridge` fallback; CI kernel matrix; clear startup error with the fallback hint |
 | eBPF program bugs (loops, stale maps, missed redirect) | Broken traffic or silent isolation gaps | Verifier-friendly program; netns-based unit tests; staged attach with rollback; bridge fallback |
 | Registry auth/proxy and untrusted images | Pull failures or untrusted rootfs | Documented credentials/proxy policy; verify layer digests; no Docker daemon or host mounts |
 | CoW mechanism unavailable or corruption | Slow copy fallback or damaged disks | Detect reflink support; dm-thin fallback; copy last resort; integrity tests; fsync volume at offload |
@@ -1006,7 +1007,7 @@ A reproducible demo on one KVM host, no manual lifecycle steps:
 19. **Idle thresholds** — defaults: 30 s debounce, CPU < 1% (windowed) to
     permit sleep, 5% to leave `Idle`, 64 KiB block-I/O budget, stdout not
     counted. Confirm these fit the workload mix; health-check traffic counts as
-    activity unless its port is added to `idle.ignore_ports`.
+    activity unless its port is added to `lifecycle.idle_detection.ignore_ports`.
 
 ---
 

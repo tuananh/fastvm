@@ -42,7 +42,7 @@ With no command, it leaves the sandbox running and prints ID/state/name.
 | `--vcpus N` | vCPUs |
 | `--memory MB` | Memory in MiB |
 | `--env K=V` | Workload environment |
-| `-v, --volume SPEC` | Host volume `host[:guest][:ro]` |
+| `-v, --volume SPEC` | Host volume `host[:guest][:ro]` or data volume `size=8GiB,mount=/data` |
 | `-w, --workdir DIR` | Guest working directory |
 | `--entrypoint CMD` | Override image/fvmfile entrypoint |
 | `--no-auto-sleep` | Never auto-sleep |
@@ -54,6 +54,8 @@ key and `--volume` overrides a matching guest path.
 
 ```sh
 fastvmctl run --net --image alpine -- uname -a
+fastvmctl run --image alpine --volume size=8GiB,mount=/data
+fastvmctl run --image alpine --volume /host/project:/workspace
 fastvmctl run --net -it --image alpine -- /bin/sh
 fastvmctl run -f examples/coding-agents/codex.fvmfile
 fastvmctl run --image alpine --name agent --no-start

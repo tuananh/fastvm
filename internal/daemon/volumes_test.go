@@ -13,7 +13,7 @@ func TestValidateVolumes(t *testing.T) {
 	share := t.TempDir()
 	other := t.TempDir()
 	cfg := config.Default()
-	cfg.Volumes.AllowedHostPrefixes = []string{share}
+	cfg.HostVolumes.AllowedPrefixes = []string{share}
 
 	if err := os.MkdirAll(filepath.Join(share, "data"), 0o755); err != nil {
 		t.Fatal(err)

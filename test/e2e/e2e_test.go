@@ -131,7 +131,7 @@ func newStack(t *testing.T, kernel string) *stack {
 	cfg.DataDir = filepath.Join(tmp, "data")
 	cfg.KernelPath = kernel
 	cfg.AgentPath = agentBin
-	cfg.Wake.CoalesceWindow = config.Duration(10 * time.Millisecond)
+	cfg.Lifecycle.WakePolicy.CoalesceWindow = config.Duration(10 * time.Millisecond)
 
 	st, err := store.Open(filepath.Join(tmp, "state.db"))
 	if err != nil {

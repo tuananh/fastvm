@@ -1,4 +1,4 @@
-# Guest integration (`guest/`)
+# Guest integration
 
 Files the image pipeline must inject into every fastvm base disk:
 
@@ -57,7 +57,7 @@ fastvm.volume.<n>=fastvm<n>:<guest_path>:<ro|rw>
 and `/init` mounts each one (`mount -t virtiofs fastvm<n> <guest_path>`) before
 exec'ing the agent, so workloads, `exec` sessions and the shell see them from
 the first command. Host paths are validated by the daemon against
-`volumes.allowed_host_prefixes`; each share is served by a `virtiofsd` process.
+`host_volumes.allowed_prefixes`; each share is served by a `virtiofsd` process.
 Volumes are static at create time (no hotplug), and virtio-fs DAX is not
 supported by Cloud Hypervisor. Mounted host directories must be treated as
 trusted input.

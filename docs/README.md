@@ -11,6 +11,7 @@
 | [Auto-publishing ports](AUTO_PUBLISH.md) | Discover guest TCP listeners and publish them on loopback |
 | [Snapshots](SNAPSHOT.md) | Save and restore sandbox memory, device state, and writable disk |
 | [Sandbox lifecycle](LIFECYCLE.md) | Running, idle, paused, dormant, wake, and auto-sleep |
+| [Guest agent](GUEST.md) | Guest init, vsock protocol, and workload lifecycle |
 | [REST API](API.md) | Unix socket and optional TCP REST transport with mTLS |
 | [Examples](../examples/) | Coding agents, headless Chrome, GitHub Actions runner |
 | [Prometheus metrics](METRICS.md) | Daemon and per-sandbox metrics, scrape config |
@@ -36,9 +37,9 @@ internal/wake/         wake coalescing/rate limiting
 internal/snapshot/     (mem-file restore is in the VMM driver today)
 internal/lifecycle/    state machine + idle predicate
 internal/daemon/       runtime orchestration
-guest/                 guest init + workload config
+cmd/fastvm-agent/      guest init + agent
 bpf/                   L2 switch eBPF program
-docs/                  DESIGN.md, GETTING_STARTED.md, LIMITATIONS.md, CLOUD_HYPERVISOR_MIGRATION.md, SETUP_COW_VOLUME.md
+docs/                  DESIGN.md, GETTING_STARTED.md, LIMITATIONS.md, GUEST.md, CLOUD_HYPERVISOR_MIGRATION.md, SETUP_COW_VOLUME.md
 test/e2e/              gated end-to-end tests + Cloud Hypervisor kernel/rootfs fetch script
 hack/                  runnable demo, config, and setup helpers
 console/               React + Vite+ web console (OIDC, dashboard, live stats)

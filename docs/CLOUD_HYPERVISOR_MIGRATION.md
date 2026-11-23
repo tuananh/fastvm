@@ -73,7 +73,7 @@ Kernel cmdline stays close to the Firecracker one
 Design (approved):
 
 1. A sandbox can carry `volumes: [{host_path, guest_path, read_only}]`.
-   `host_path` must be absolute and under one of `volumes.allowed_host_prefixes`
+   `host_path` must be absolute and under one of `host_volumes.allowed_prefixes`
    (empty = deny); `guest_path` must be absolute; `read_only` defaults per API.
 2. For each volume the driver spawns
    `virtiofsd --shared-dir=<host> --socket-path=<sandbox>/fs-<n>.sock` and passes

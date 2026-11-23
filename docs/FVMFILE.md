@@ -58,7 +58,7 @@ no_auto_sleep: true
 | `command` | Default arguments appended to `entrypoint`, like Docker's `CMD`. Without `entrypoint`, it is the full guest argv. |
 | `workdir` | Guest working directory for the command, `exec`, and shell sessions. Must be an absolute clean path. |
 | `env` | Guest environment for the workload, user_data, exec, and shell sessions. `${NAME}` is expanded from the host environment; unset references are an error. |
-| `volumes` | `host`, `guest`, `read_only`. Relative host paths resolve against the file directory. |
+| `volumes` | Host share (`host`, `guest`, `read_only`) or data volume (`size`, `mount`, optional `name`). |
 | `ports` | `host`, `guest`, optional `protocol` (`tcp`/`udp`). |
 | `network.enabled` | Allocate a guest NIC. |
 | `network.allow_hosts` | Egress allowlist; implies `enabled: true`. |
@@ -95,8 +95,22 @@ use an explicit `--publish/-p` mapping for those. If a host port is occupied,
 the mapping is skipped, warned once, and retried later; it is never reassigned
 to another port. Mapping, unmapping, and skip decisions emit sandbox events
 (`fastvmctl events`).
-`-v/--volume` supports `host[:guest][:ro]`; a single host path mounts at the same
-path in the guest.
+`-v/--volume` supports host shares (`host[:guest][:ro]`; a single host path
+mounts at the same path in the guest) and writable block data volumes
+(`size=8GiB,mount=/data`; mount defaults to `/data`). Data volumes are cloned
+from a blank ext4 template, are destroyed with the sandbox, and disable
+automatic sleep and snapshots for now.
+
+```yaml
+volumes:
+  - size: 8GiB
+    mount: /data
+  - size: 2GiB
+    mount: /scratch
+  - host: /host/project
+    guest: /workspace
+    read_only: true
+```
 - `--entrypoint <cmd>` overrides `entrypoint` for one run, like Docker:
 
 ```sh

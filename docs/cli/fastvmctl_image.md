@@ -23,7 +23,7 @@ removes images. Images are cached by source and compressed layers by digest.
 
 | Option | Description |
 |---|---|
-| `--size-gb N` | Base disk size in GiB |
+| `--size-gb N` | Base disk size in GiB (default: daemon `storage.root_size_gb`, 8) |
 
 ### rm
 

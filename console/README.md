@@ -199,7 +199,7 @@ accepted by `POST /v1/sandboxes`:
 ```
 
 - `host_path` must be an absolute host directory. fastvmd validates it against
-  the `volumes.allowed_host_prefixes` allowlist (an empty list denies every
+  the `host_volumes.allowed_prefixes` allowlist (an empty list denies every
   volume), so the console cannot mount arbitrary host paths.
 - `guest_path` is the absolute mountpoint inside the guest (no whitespace, `:`
   or `,`); `read_only` is optional and defaults to read-write.

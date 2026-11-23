@@ -147,7 +147,7 @@ func (m *ebpfManager) Create(ctx context.Context, req CreateRequest) (Port, erro
 		return Port{}, err
 	}
 	if len(req.AllowHosts) > 0 {
-		return Port{}, fmt.Errorf("%w: egress allowlists require switch.mode=bridge", ErrUnsupported)
+		return Port{}, fmt.Errorf("%w: egress allowlists require network.datapath.mode=bridge", ErrUnsupported)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

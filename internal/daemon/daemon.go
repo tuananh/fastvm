@@ -73,6 +73,8 @@ type Daemon struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
+	dataMu sync.Mutex
+
 	wakeMu    sync.Mutex
 	lastWake  map[string]time.Time
 	wakeTimes map[string][]time.Time
@@ -207,13 +209,13 @@ func (rt *runtime) stop() {
 func (d *Daemon) newRuntime(id string) *runtime {
 	cfg := lifecycle.IdleConfig{
 		Window:          d.cfg.Lifecycle.IdleWindow.D(),
-		SampleInterval:  d.cfg.Idle.SampleInterval.D(),
-		ExitHold:        d.cfg.Idle.ExitHold.D(),
-		Warmup:          d.cfg.Idle.Warmup.D(),
-		CPUThresholdPct: d.cfg.Idle.CPUThresholdPct,
-		CPUWakePct:      d.cfg.Idle.CPUWakePct,
-		BlockIOBytes:    d.cfg.Idle.BlockIOBytes,
-		KeepaliveAware:  d.cfg.Idle.KeepaliveAware,
+		SampleInterval:  d.cfg.Lifecycle.IdleDetection.SampleInterval.D(),
+		ExitHold:        d.cfg.Lifecycle.IdleDetection.ExitHold.D(),
+		Warmup:          d.cfg.Lifecycle.IdleDetection.Warmup.D(),
+		CPUThresholdPct: d.cfg.Lifecycle.IdleDetection.CPUThresholdPct,
+		CPUWakePct:      d.cfg.Lifecycle.IdleDetection.CPUWakePct,
+		BlockIOBytes:    d.cfg.Lifecycle.IdleDetection.BlockIOBytes,
+		KeepaliveAware:  d.cfg.Lifecycle.IdleDetection.KeepaliveAware,
 	}
 	return &runtime{cpu: lifecycle.NewCPUWindow(cfg), events: make(chan agent.Event, 32), done: make(chan struct{})}
 }
@@ -223,6 +225,9 @@ func (d *Daemon) newRuntime(id string) *runtime {
 func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.Sandbox, error) {
 	if opts.FromSnapshot != "" && opts.UserData != "" {
 		return types.Sandbox{}, fmt.Errorf("%w: user_data cannot be combined with from_snapshot", manager.ErrInvalid)
+	}
+	if opts.FromSnapshot != "" && len(opts.DataVolumes) > 0 {
+		return types.Sandbox{}, fmt.Errorf("%w: data volumes cannot be combined with from_snapshot", manager.ErrInvalid)
 	}
 	if opts.FromSnapshot != "" {
 		path, err := d.resolveSnapshotName(opts.FromSnapshot)
@@ -246,6 +251,9 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 		return types.Sandbox{}, fmt.Errorf("%w: vcpus>=1 and memory_mb>=64 required", manager.ErrInvalid)
 	}
 	if err := validateVolumes(d.cfg, opts.Volumes); err != nil {
+		return types.Sandbox{}, err
+	}
+	if err := validateDataVolumes(opts.DataVolumes); err != nil {
 		return types.Sandbox{}, err
 	}
 	if opts.Workdir != "" {
@@ -286,7 +294,8 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 	sb := types.Sandbox{
 		ID: id, Name: opts.Name, BaseDisk: base.Digest, VCPUs: vcpus, MemoryMB: mem,
 		State: types.StateCreating, Workdir: opts.Workdir, AutoPublish: opts.AutoPublish,
-		NoAutoSleep: opts.NoAutoSleep, Ports: opts.Ports, Volumes: opts.Volumes,
+		NoAutoSleep: opts.NoAutoSleep || len(opts.DataVolumes) > 0,
+		Ports:       opts.Ports, Volumes: opts.Volumes, DataVolumes: opts.DataVolumes,
 		NetworkEnabled: networkEnabled, AllowHosts: opts.AllowHosts,
 		VMMAPISock:  filepath.Join(dir, "vmm-api.sock"),
 		VsockUDPath: filepath.Join(dir, "vsock.sock"),
@@ -306,16 +315,25 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 	rt.autoBase = append([]types.PortMapping(nil), opts.Ports...)
 	rt.autoHost = make(map[int]int)
 
-	vol, err := d.vol.Create(ctx, id, base, 0, d.cfg.Volume.COW) // 0 = use base disk size
+	vol, err := d.vol.Create(ctx, id, base, 0, d.cfg.Storage.COW) // 0 = use base disk size
 	if err != nil {
 		d.fail(ctx, rt, "volume: %v", err)
 		return types.Sandbox{}, err
 	}
 	sb.VolumePath = vol.Path
+	dataVols, err := d.createDataVolumes(ctx, id, opts.DataVolumes)
+	if err != nil {
+		d.removeDataVolumes(sb.DataVolumes)
+		_ = d.vol.Remove(context.Background(), id)
+		d.fail(ctx, rt, "data volume: %v", err)
+		return types.Sandbox{}, err
+	}
+	sb.DataVolumes = dataVols
 
 	if networkEnabled {
 		port, err := d.net.Create(ctx, network.CreateRequest{SandboxID: id, Ports: opts.Ports, AllowHosts: opts.AllowHosts})
 		if err != nil {
+			d.removeDataVolumes(sb.DataVolumes)
 			_ = d.vol.Remove(context.Background(), id)
 			d.fail(ctx, rt, "network: %v", err)
 			return types.Sandbox{}, err
@@ -326,6 +344,7 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 			mac, merr := net.ParseMAC(sb.MAC)
 			if merr != nil {
 				_ = d.net.Delete(context.Background(), id)
+				d.removeDataVolumes(sb.DataVolumes)
 				_ = d.vol.Remove(context.Background(), id)
 				d.fail(ctx, rt, "switch: bad MAC %q: %v", sb.MAC, merr)
 				return types.Sandbox{}, merr
@@ -336,6 +355,7 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 				ifidx, ierr = d.ifIndex(sb.TAPName)
 				if ierr != nil {
 					_ = d.net.Delete(context.Background(), id)
+					d.removeDataVolumes(sb.DataVolumes)
 					_ = d.vol.Remove(context.Background(), id)
 					d.fail(ctx, rt, "switch: tap %q: %v", sb.TAPName, ierr)
 					return types.Sandbox{}, ierr
@@ -345,6 +365,7 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 				SandboxID: id, IfIndex: ifidx, MAC: mac, IsSandbox: true,
 			}); aerr != nil {
 				_ = d.net.Delete(context.Background(), id)
+				d.removeDataVolumes(sb.DataVolumes)
 				_ = d.vol.Remove(context.Background(), id)
 				d.fail(ctx, rt, "switch: add port: %v", aerr)
 				return types.Sandbox{}, aerr
@@ -368,6 +389,7 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 		rt.mu.Unlock()
 		if err != nil {
 			_ = d.net.Delete(context.Background(), id)
+			d.removeDataVolumes(sb.DataVolumes)
 			_ = d.vol.Remove(context.Background(), id)
 			return types.Sandbox{}, err
 		}
@@ -402,6 +424,7 @@ func (d *Daemon) bootLocked(ctx context.Context, rt *runtime) error {
 		SandboxID:   sb.ID,
 		KernelPath:  d.cfg.KernelPath,
 		DiskPath:    sb.VolumePath,
+		DataDisks:   dataDiskPaths(sb.DataVolumes),
 		VCPUs:       sb.VCPUs,
 		MemoryMB:    sb.MemoryMB,
 		TAPName:     sb.TAPName,
@@ -459,7 +482,7 @@ func (d *Daemon) bootLocked(ctx context.Context, rt *runtime) error {
 	sb.State = types.StateRunning
 	sb.LastActivityAt = now
 	sb.WakeCount = 0
-	rt.warmupUntil = now.Add(d.cfg.Idle.Warmup.D())
+	rt.warmupUntil = now.Add(d.cfg.Lifecycle.IdleDetection.Warmup.D())
 	rt.lastTick = now
 	rt.lastCPU = 0
 	rt.lastBlock = 0
@@ -742,9 +765,10 @@ func (d *Daemon) Delete(ctx context.Context, ref string) error {
 	if d.sw != nil {
 		_ = d.sw.RemovePort(context.Background(), sb.ID)
 	}
-	if d.cfg.Volume.DiscardOnDestroy {
+	if d.cfg.Storage.DiscardOnDestroy {
 		_ = d.vol.Remove(context.Background(), sb.ID)
 	}
+	d.removeDataVolumes(sb.DataVolumes)
 	_ = os.RemoveAll(filepath.Join(d.cfg.DataDir, "sandboxes", sb.ID))
 	if err := d.st.DeleteSandbox(ctx, sb.ID); err != nil {
 		return err
@@ -845,8 +869,12 @@ func (d *Daemon) PullImage(ctx context.Context, spec manager.PullOptions) (types
 	if strings.TrimSpace(spec.Ref) == "" {
 		return types.BaseDisk{}, fmt.Errorf("%w: image reference required", manager.ErrInvalid)
 	}
+	sizeGB := spec.SizeGB
+	if sizeGB == 0 {
+		sizeGB = d.cfg.Storage.RootSizeGB
+	}
 	return d.img.Pull(ctx, image.PullSpec{
-		Ref: spec.Ref, SizeGB: spec.SizeGB,
+		Ref: spec.Ref, SizeGB: sizeGB,
 		AgentPath: d.cfg.AgentPath, InitPath: d.cfg.InitPath,
 	})
 }
@@ -859,8 +887,9 @@ func (d *Daemon) IngestRootfs(ctx context.Context, rootfsDir, tag string) (types
 	if tag == "" || rootfsDir == "" {
 		return types.BaseDisk{}, fmt.Errorf("%w: rootfs_dir and tag required", manager.ErrInvalid)
 	}
+	sizeGB := d.cfg.Storage.RootSizeGB
 	return d.img.Ingest(ctx, image.IngestSpec{
-		RootfsDir: rootfsDir, Tag: tag, SizeGB: 0,
+		RootfsDir: rootfsDir, Tag: tag, SizeGB: sizeGB,
 		AgentPath: d.cfg.AgentPath, InitPath: d.cfg.InitPath,
 	})
 }
@@ -932,6 +961,9 @@ func (d *Daemon) pauseLocked(ctx context.Context, rt *runtime, sb *types.Sandbox
 }
 
 func (d *Daemon) offloadLocked(ctx context.Context, rt *runtime, sb *types.Sandbox) error {
+	if len(sb.DataVolumes) > 0 {
+		return fmt.Errorf("%w: deep sleep with data volumes is not supported yet", manager.ErrConflict)
+	}
 	if d.cfg.Memory.OffloadMode == "never" {
 		return fmt.Errorf("%w: memory offload is disabled (memory.offload_mode=never)", manager.ErrConflict)
 	}
@@ -1008,7 +1040,7 @@ func (d *Daemon) wakeLocked(ctx context.Context, rt *runtime, sb *types.Sandbox)
 		}
 	}
 	now := d.now()
-	rt.warmupUntil = now.Add(d.cfg.Idle.Warmup.D())
+	rt.warmupUntil = now.Add(d.cfg.Lifecycle.IdleDetection.Warmup.D())
 	rt.lastTick = now
 	sb.LastActivityAt = now
 	sb.WakeCount++
@@ -1064,8 +1096,8 @@ func (d *Daemon) touchLocked(rt *runtime, sb *types.Sandbox) {
 
 func (d *Daemon) monitor(rt *runtime) {
 	defer d.wg.Done()
-	ticker := time.NewTicker(d.cfg.Idle.SampleInterval.D())
-	if d.cfg.Idle.SampleInterval.D() <= 0 {
+	ticker := time.NewTicker(d.cfg.Lifecycle.IdleDetection.SampleInterval.D())
+	if d.cfg.Lifecycle.IdleDetection.SampleInterval.D() <= 0 {
 		ticker.Reset(time.Second)
 	}
 	defer ticker.Stop()
@@ -1115,7 +1147,7 @@ func (d *Daemon) sampleLocked(rt *runtime, sb *types.Sandbox) {
 	now := d.now()
 	elapsed := now.Sub(rt.lastTick)
 	if elapsed <= 0 {
-		elapsed = d.cfg.Idle.SampleInterval.D()
+		elapsed = d.cfg.Lifecycle.IdleDetection.SampleInterval.D()
 	}
 	rt.lastTick = now
 	if rt.vm != nil {
@@ -1145,7 +1177,7 @@ func (d *Daemon) sampleLocked(rt *runtime, sb *types.Sandbox) {
 			if block > rt.lastBlock {
 				delta := block - rt.lastBlock
 				rt.lastBlock = block
-				if delta >= uint64(d.cfg.Idle.BlockIOBytes) {
+				if delta >= uint64(d.cfg.Lifecycle.IdleDetection.BlockIOBytes) {
 					d.touchLocked(rt, sb)
 				}
 			}
@@ -1167,12 +1199,12 @@ func (d *Daemon) evaluateLocked(rt *runtime, sb *types.Sandbox) {
 	cpuAvg := rt.cpu.Average(now)
 	decision := lifecycle.EvaluateIdle(lifecycle.IdleConfig{
 		Window:          d.cfg.Lifecycle.IdleWindow.D(),
-		SampleInterval:  d.cfg.Idle.SampleInterval.D(),
-		ExitHold:        d.cfg.Idle.ExitHold.D(),
-		Warmup:          d.cfg.Idle.Warmup.D(),
-		CPUThresholdPct: d.cfg.Idle.CPUThresholdPct,
-		CPUWakePct:      d.cfg.Idle.CPUWakePct,
-		BlockIOBytes:    d.cfg.Idle.BlockIOBytes,
+		SampleInterval:  d.cfg.Lifecycle.IdleDetection.SampleInterval.D(),
+		ExitHold:        d.cfg.Lifecycle.IdleDetection.ExitHold.D(),
+		Warmup:          d.cfg.Lifecycle.IdleDetection.Warmup.D(),
+		CPUThresholdPct: d.cfg.Lifecycle.IdleDetection.CPUThresholdPct,
+		CPUWakePct:      d.cfg.Lifecycle.IdleDetection.CPUWakePct,
+		BlockIOBytes:    d.cfg.Lifecycle.IdleDetection.BlockIOBytes,
 	}, lifecycle.Observation{
 		Now: now, LastActivityAt: sb.LastActivityAt, CPUAvgPct: cpuAvg,
 		ExecActive: rt.execActive > 0, GuestBusy: rt.guestBusy,
@@ -1198,7 +1230,7 @@ func (d *Daemon) evaluateLocked(rt *runtime, sb *types.Sandbox) {
 		}
 		return
 	}
-	if rt.cpu.AboveFor(now, d.cfg.Idle.CPUWakePct, d.cfg.Idle.ExitHold.D()) {
+	if rt.cpu.AboveFor(now, d.cfg.Lifecycle.IdleDetection.CPUWakePct, d.cfg.Lifecycle.IdleDetection.ExitHold.D()) {
 		rt.idleReason = "cpu activity"
 	} else {
 		rt.idleReason = "activity"
@@ -1222,9 +1254,10 @@ func (d *Daemon) deleteLocked(rt *runtime, sb *types.Sandbox) error {
 	if d.sw != nil {
 		_ = d.sw.RemovePort(ctx, sb.ID)
 	}
-	if d.cfg.Volume.DiscardOnDestroy {
+	if d.cfg.Storage.DiscardOnDestroy {
 		_ = d.vol.Remove(ctx, sb.ID)
 	}
+	d.removeDataVolumes(sb.DataVolumes)
 	_ = os.RemoveAll(filepath.Join(d.cfg.DataDir, "sandboxes", sb.ID))
 	if err := d.st.DeleteSandbox(ctx, sb.ID); err != nil {
 		return err
@@ -1336,11 +1369,11 @@ func (d *Daemon) handleWakeEvent(ev network.WakeEvent) {
 	d.wakeMu.Lock()
 	now := d.now()
 	last := d.lastWake[ev.SandboxID]
-	if !last.IsZero() && now.Sub(last) < d.cfg.Wake.CoalesceWindow.D() {
+	if !last.IsZero() && now.Sub(last) < d.cfg.Lifecycle.WakePolicy.CoalesceWindow.D() {
 		d.wakeMu.Unlock()
 		return
 	}
-	if max := d.cfg.Wake.MaxWakesPerMinute; max > 0 {
+	if max := d.cfg.Lifecycle.WakePolicy.MaxWakesPerMinute; max > 0 {
 		cutoff := now.Add(-time.Minute)
 		times := d.wakeTimes[ev.SandboxID]
 		kept := times[:0]
@@ -1388,6 +1421,7 @@ func (d *Daemon) runtimeFor(ctx context.Context, ref string) (*runtime, error) {
 }
 
 func (d *Daemon) cleanupFailed(ctx context.Context, sb *types.Sandbox) {
+	d.removeDataVolumes(sb.DataVolumes)
 	_ = d.net.Delete(ctx, sb.ID)
 	if d.sw != nil {
 		_ = d.sw.RemovePort(ctx, sb.ID)
@@ -1554,8 +1588,21 @@ func entropySeed() string {
 // a host-provided entropy seed. The guest agent reads fastvm.ip/fastvm.gw to
 // configure eth0 before starting the workload, and fastvm.seed to credit the
 // kernel random pool (otherwise getrandom can block in a fresh microVM).
+func dataDiskPaths(vols []types.DataVolume) []string {
+	out := make([]string, 0, len(vols))
+	for _, vol := range vols {
+		if vol.Path != "" {
+			out = append(out, vol.Path)
+		}
+	}
+	return out
+}
+
 func bootCmdline(sb *types.Sandbox, seed string, guest guestBootFiles) string {
 	cmd := "console=ttyS0 root=/dev/vda rw init=/init"
+	for i := range sb.DataVolumes {
+		cmd += fmt.Sprintf(" fastvm.data.%d=%s", i, sb.DataVolumes[i].Mount)
+	}
 	for i, vol := range sb.Volumes {
 		mode := "rw"
 		if vol.ReadOnly {
@@ -1597,14 +1644,14 @@ func validateVolumes(cfg *config.Config, vols []types.Volume) error {
 			return fmt.Errorf("%w: volume host_path %q must be an absolute clean path", manager.ErrInvalid, host)
 		}
 		allowed := false
-		for _, prefix := range cfg.Volumes.AllowedHostPrefixes {
+		for _, prefix := range cfg.HostVolumes.AllowedPrefixes {
 			if host == prefix || strings.HasPrefix(host, prefix+string(filepath.Separator)) {
 				allowed = true
 				break
 			}
 		}
 		if !allowed {
-			return fmt.Errorf("%w: volume host_path %q is not under volumes.allowed_host_prefixes", manager.ErrInvalid, host)
+			return fmt.Errorf("%w: volume host_path %q is not under host_volumes.allowed_prefixes", manager.ErrInvalid, host)
 		}
 		guest := vol.GuestPath
 		if guest == "" {

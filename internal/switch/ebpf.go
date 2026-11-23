@@ -29,7 +29,7 @@ import (
 //
 // Loading needs CAP_BPF/CAP_SYS_ADMIN in the initial user namespace (plus tc
 // clsact support and kernel BTF). When unavailable, Open returns
-// *UnsupportedError and the daemon should use switch.mode=bridge.
+// *UnsupportedError and the daemon should use network.datapath.mode=bridge.
 
 // Map value layouts: must match bpf/l2switch.c exactly (including padding).
 type bpfMACKey struct {

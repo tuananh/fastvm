@@ -16,7 +16,7 @@ import (
 )
 
 // AF_PACKET wake/stats sniffer for the bridge backend (docs/DESIGN.md §5.5:
-// "in switch.mode=bridge, a passive AF_PACKET tap supplies the same event").
+// "in network.datapath.mode=bridge, a passive AF_PACKET tap supplies the same event").
 //
 // The sniffer is passive: it observes a copy of every frame crossing the TAP,
 // it never consumes, delays or injects frames. While the port is asleep a

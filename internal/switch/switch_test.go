@@ -43,14 +43,14 @@ func TestParseMode(t *testing.T) {
 }
 
 func TestFromConfig(t *testing.T) {
-	cfg, err := FromConfig(config.Switch{Mode: "bridge", IsolateSandboxes: true, WakeNotify: true})
+	cfg, err := FromConfig(config.DataPath{Mode: "bridge", IsolateSandboxes: true, WakeNotify: true})
 	if err != nil {
 		t.Fatalf("FromConfig: %v", err)
 	}
 	if cfg.Mode != ModeBridge || !cfg.IsolateSandboxes || !cfg.WakeNotify {
 		t.Errorf("FromConfig = %+v", cfg)
 	}
-	if _, err := FromConfig(config.Switch{Mode: "bogus"}); err == nil {
+	if _, err := FromConfig(config.DataPath{Mode: "bogus"}); err == nil {
 		t.Error("FromConfig accepted bogus mode")
 	}
 }

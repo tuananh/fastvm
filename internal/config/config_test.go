@@ -15,11 +15,11 @@ func TestDefaultsValidate(t *testing.T) {
 	if c.Lifecycle.IdleWindow.D() != 30*time.Second {
 		t.Fatalf("idle window = %v", c.Lifecycle.IdleWindow.D())
 	}
-	if c.Idle.CPUThresholdPct != 1.0 || c.Idle.CPUWakePct != 5.0 {
-		t.Fatalf("cpu thresholds = %v/%v", c.Idle.CPUThresholdPct, c.Idle.CPUWakePct)
+	if c.Lifecycle.IdleDetection.CPUThresholdPct != 1.0 || c.Lifecycle.IdleDetection.CPUWakePct != 5.0 {
+		t.Fatalf("cpu thresholds = %v/%v", c.Lifecycle.IdleDetection.CPUThresholdPct, c.Lifecycle.IdleDetection.CPUWakePct)
 	}
-	if c.Wake.MaxWakesPerMinute != 6 || !c.Wake.TCP {
-		t.Fatalf("wake defaults = %+v", c.Wake)
+	if c.Lifecycle.WakePolicy.MaxWakesPerMinute != 6 || !c.Lifecycle.WakePolicy.TCP {
+		t.Fatalf("wake policy defaults = %+v", c.Lifecycle.WakePolicy)
 	}
 }
 
@@ -34,19 +34,23 @@ lifecycle:
   pause_after: 30s
   offload_after: 5m
   destroy_after: 1h
-idle:
-  cpu_threshold_pct: 2.5
-  cpu_wake_pct: 10
-  sample_interval: 250ms
-  warmup: 3s
-  block_io_bytes: 4096
-  ignore_ports: [8081]
+  idle_detection:
+    cpu_threshold_pct: 2.5
+    cpu_wake_pct: 10
+    sample_interval: 250ms
+    warmup: 3s
+    block_io_bytes: 4096
+    ignore_ports: [8081]
 memory:
   offload_mode: never
-volume:
+storage:
   cow: copy
-switch:
-  mode: bridge
+  root_size_gb: 2
+host_volumes:
+  allowed_prefixes: [/tmp]
+network:
+  datapath:
+    mode: bridge
 defaults:
   vcpus: 1
   memory_mb: 128
@@ -61,14 +65,17 @@ defaults:
 	if c.DataDir != "/tmp/fastvm-data" || c.Lifecycle.IdleWindow.D() != 5*time.Second {
 		t.Fatalf("bad override: %+v", c)
 	}
-	if c.Idle.SampleInterval.D() != 250*time.Millisecond || c.Idle.BlockIOBytes != 4096 {
-		t.Fatalf("idle override = %+v", c.Idle)
+	if c.Lifecycle.IdleDetection.SampleInterval.D() != 250*time.Millisecond || c.Lifecycle.IdleDetection.BlockIOBytes != 4096 {
+		t.Fatalf("idle override = %+v", c.Lifecycle.IdleDetection)
 	}
-	if c.Memory.OffloadMode != "never" || c.Volume.COW != "copy" || c.Switch.Mode != "bridge" {
+	if c.Memory.OffloadMode != "never" || c.Storage.COW != "copy" || c.Storage.RootSizeGB != 2 || c.Network.DataPath.Mode != "bridge" {
 		t.Fatalf("modes = %+v", c)
 	}
-	if len(c.Idle.IgnorePorts) != 1 || c.Idle.IgnorePorts[0] != 8081 {
-		t.Fatalf("ignore ports = %v", c.Idle.IgnorePorts)
+	if len(c.Lifecycle.IdleDetection.IgnorePorts) != 1 || c.Lifecycle.IdleDetection.IgnorePorts[0] != 8081 {
+		t.Fatalf("ignore ports = %v", c.Lifecycle.IdleDetection.IgnorePorts)
+	}
+	if len(c.HostVolumes.AllowedPrefixes) != 1 || c.HostVolumes.AllowedPrefixes[0] != "/tmp" {
+		t.Fatalf("host volumes = %+v", c.HostVolumes)
 	}
 }
 
@@ -81,10 +88,10 @@ func TestLoadMissingFile(t *testing.T) {
 func TestValidateRejectsBadValues(t *testing.T) {
 	cases := map[string]func(*Config){
 		"negative duration":     func(c *Config) { c.Lifecycle.IdleWindow = Duration(-time.Second) },
-		"wake below threshold":  func(c *Config) { c.Idle.CPUWakePct = 0.5 },
+		"wake below threshold":  func(c *Config) { c.Lifecycle.IdleDetection.CPUWakePct = 0.5 },
 		"bad offload mode":      func(c *Config) { c.Memory.OffloadMode = "magic" },
-		"bad cow":               func(c *Config) { c.Volume.COW = "magic" },
-		"bad switch":            func(c *Config) { c.Switch.Mode = "magic" },
+		"bad cow":               func(c *Config) { c.Storage.COW = "magic" },
+		"bad datapath":          func(c *Config) { c.Network.DataPath.Mode = "magic" },
 		"bad exit policy":       func(c *Config) { c.Lifecycle.OnWorkloadExit = "explode" },
 		"no data dir":           func(c *Config) { c.DataDir = "" },
 		"tiny defaults":         func(c *Config) { c.Defaults.VCPUs = 0 },

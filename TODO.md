@@ -10,6 +10,21 @@ Longer-term ideas and research items. Check items off as they land.
   - Decide resource model: whole GPU, MIG slice, or vGPU; how to schedule/claim GPUs per sandbox.
   - Add GPU capability reporting to `fastvmd`/`fastvmctl`.
 
+- [ ] **Virtio-GPU / Venus for shared graphics**
+  - CH v54 has no native virtio-gpu. The Spectrum OS patchset is only published
+    for CH 50.0 (and older), not v54.
+  - That patchset needs a patched `vhost` crate, crosvm's virtio-gpu, and
+    non-standard vhost-user commands; crosvm is not installed here.
+  - Cheaper spike: try CH v54 `--generic-vhost-user` with QEMU's
+    `vhost-user-gpu` backend, but protocol/device compatibility is unverified.
+  - The guest test kernel currently lacks `virtio_gpu`; a kernel with
+    `CONFIG_DRM_VIRTIO_GPU` is required.
+  - Target Venus (Vulkan-over-virtio), not CUDA. Guest image needs Mesa Venus
+    and a Vulkan loader; desktop additionally needs a compositor + VNC/Wayland
+    path.
+  - Decide: forward-port Spectrum patches to v54, pin a patched CH 50 for GPU
+    nodes, or prototype generic-vhost-user first.
+
 - [ ] **VNC / graphical console**
   - Use Cloud Hypervisor's VNC support (or virtio-gpu + a display path) instead of exec-only access.
   - Decide auth model (loopback-only? per-sandbox token? SSH tunnel?) and clipboard/security policy.
@@ -62,7 +77,7 @@ Longer-term ideas and research items. Check items off as they land.
   - Cover pool sizing/overcommit, leak detection, recovery after daemon restart,
     and cleanup of orphaned thin volumes.
   - Compare with the current reflink/copy backends and decide whether to
-    implement `volume.cow: dm-thin`.
+    implement `storage.cow: dm-thin`.
   - Add integration tests on a disposable thin pool; skip cleanly without
     device-mapper privileges.
 

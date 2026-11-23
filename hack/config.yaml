@@ -10,91 +10,80 @@
 #   sudo bin/fastvmd -config hack/config.yaml
 #
 # The daemon needs root or CAP_NET_ADMIN (TAP/bridge/nftables) and, for the
-# eBPF switch, CAP_BPF; without CAP_BPF it automatically falls back to the
+# eBPF datapath, CAP_BPF; without CAP_BPF it automatically falls back to the
 # Linux bridge. Cloud Hypervisor v54+ (and virtiofsd when host-directory volumes
 # are used) must be installed; see the vmm section below.
 
-data_dir: /tmp/fastvm-cow/data
-socket_path: /run/fastvm/fastvm.sock
-kernel_path: test/e2e/assets/vmlinux.bin
-agent_path: bin/fastvm-agent
+# Directory for state.db, base images, sandboxes, volumes, and snapshots.
+data_dir: /tmp/fastvm-cow/data # must be writable and large enough
 
-# VMM backend. Cloud Hypervisor is the only supported backend. The binary is
-# looked up on PATH (`cloud-hypervisor`, then `cloud-hypervisor-static`) and can
-# be overridden with an absolute path or FASTVM_CLOUD_HYPERVISOR.
+# Unix socket for the local JSON API. The daemon creates it with mode 0600.
+socket_path: /run/fastvm/fastvm.sock # absolute path; parent directory must be writable
+
+# Guest kernel image and guest agent binary injected into new base images.
+kernel_path: test/e2e/assets/vmlinux.bin # absolute or relative to daemon cwd
+agent_path: bin/fastvm-agent # absolute or relative to daemon cwd
+
+# VMM executables (Cloud Hypervisor is the only supported VMM).
 vmm:
-  binary: cloud-hypervisor
-  # virtiofsd serves host-directory volumes (virtio-fs). Needed only when a
-  # sandbox has volumes; override with an absolute path (e.g. /usr/lib/virtiofsd)
-  # when it is not on PATH.
-  virtiofsd: virtiofsd
+  binary: cloud-hypervisor # Cloud Hypervisor executable: name on PATH or absolute path
+  virtiofsd: virtiofsd # virtio-fs daemon for host volumes: name on PATH or absolute path
 
-# Host-directory volumes (virtio-fs). Each volume's host_path must be an
-# absolute path under one of these prefixes; an empty list denies all host
-# mounts. Add /tmp here to try host shares in demos, e.g.
-#   allowed_host_prefixes: [/tmp]
-volumes:
-  # Host-directory mounts are opt-in: empty denies all. Local dev prefixes:
-  # /tmp for throwaway shares, and this machine's fastvm checkout so a sandbox
-  # can mount the source. Replace/remove the checkout path before committing.
-  allowed_host_prefixes:
-    - /tmp
-    - /home/anh/Code/fastvm
+# Host-directory volumes shared into guests via virtio-fs.
+# Each host path must be absolute and below one of the allowed prefixes.
+host_volumes:
+  allowed_prefixes: # absolute directory prefixes allowed for --volume host shares; [] denies all
+    - /tmp # throwaway demo shares
+    - /home/anh/Code/fastvm # local checkout shares
 
+# Sandbox state machine: idle detection, auto-pause/offload, and wake policy.
 lifecycle:
-  # Generous windows: a coding-agent VM should not pause after a few seconds of
-  # idle. Shorten them in your own config if you want faster auto-sleep.
-  idle_window: 60s
-  pause_after: 10m
-  offload_after: 30m
-  destroy_after: 0s
-  on_workload_exit: idle
+  idle_window: 60s # Running -> Idle debounce; duration string (500ms, 30s, 2m, 1h, 0s)
+  pause_after: 10m # Idle -> Paused delay; 0s disables auto-pause
+  offload_after: 30m # Paused -> Dormant delay; 0s disables offload
+  destroy_after: 0s # sleeping/idle lifetime before delete; 0s = never
+  on_workload_exit: idle # after workload exit: idle | pause | offload | stop
 
-idle:
-  cpu_threshold_pct: 1.0
-  cpu_wake_pct: 5.0
-  sample_interval: 1s
-  exit_hold: 3s
-  warmup: 1s
-  block_io_bytes: 65536
-  keepalive_aware: true
+  idle_detection:
+    cpu_threshold_pct: 1.0 # CPU % below this permits Idle; 0.0-100.0
+    cpu_wake_pct: 5.0 # CPU % above this wakes Idle; 0.0-100.0 and >= cpu_threshold_pct
+    sample_interval: 1s # CPU/block-I/O sampling period; duration > 0
+    exit_hold: 3s # time CPU must stay above cpu_wake_pct; duration >= 0
+    warmup: 1s # startup grace before idle detection; duration >= 0
+    block_io_bytes: 65536 # block I/O at/above this counts as activity; integer >= 0
+    keepalive_aware: true # true = pure ACKs/TCP keepalives are not activity; true | false
+    ignore_ports: [] # ports that never count/wake; list of 1-65535 ports; [] = none
 
+  wake_policy:
+    tcp: true # wake on inbound TCP; true | false
+    udp: true # wake on inbound UDP; true | false
+    icmp: true # wake on inbound ICMP; true | false
+    allowed_ports: [] # destination ports allowed to wake; 1-65535; [] = any unicast
+    max_wakes_per_minute: 6 # per-sandbox wake rate limit; integer >= 0, 0 = unlimited
+    coalesce_window: 100ms # burst window producing one wake; duration >= 0
+
+# Guest RAM offload and host memory-pressure policy.
 memory:
-  offload_mode: file
+  offload_mode: file # guest RAM offload: file | never ("file" enables deep sleep)
+  evict_above: 0.90 # host RAM fraction triggering eviction of oldest Paused; 0.0-1.0
+  reserve_mb: 1024 # host memory kept free when scheduling/evicting; integer MiB >= 0
 
-wake:
-  tcp: true
-  udp: true
-  icmp: true
-  max_wakes_per_minute: 6
-  coalesce_window: 100ms
+# Writable root-disk/image storage settings.
+storage:
+  cow: reflink # clone backend: reflink (XFS/Btrfs) | copy | dm-thin (not implemented)
+  root_size_gb: 1 # base/root disk GiB for new images; integer >= 1; oversized rootfs fails
+  discard_on_destroy: true # delete writable volume with sandbox; true | false
 
-# CoW runtime-volume settings (not to be confused with the top-level `volumes`
-# host-directory shares above).
-volume:
-  cow: reflink
-  size_gb: 8
-  discard_on_destroy: true
-
-switch:
-  # eBPF is the default data plane. Without CAP_BPF/BTF (or when the verifier
-  # rejects the program) fastvmd automatically falls back to the Linux bridge
-  # + AF_PACKET wake path.
-  mode: bridge
-  isolate_sandboxes: true
-  wake_notify: true
-
-# Optional REST JSON API over TCP. The unix socket is always available; TCP is
-# mTLS-only and disabled when host is empty. cert_path must contain:
-#   ca.pem    CA used to verify client certificates
-#   cert.pem  server certificate
-#   key.pem   server private key
+# Optional TCP JSON API with mutual TLS; the unix socket is always enabled.
 api:
-  host: 127.0.0.1:8443
-  cert_path: /tmp/fastvm/certs/server
+  host: 127.0.0.1:8443 # TCP API host:port; "" disables TCP; requires cert_path
+  cert_path: /tmp/fastvm/certs/server # dir with ca.pem, cert.pem, key.pem; empty only when host is empty
 
+# Guest networking and the host L2 forwarding datapath.
 network:
-  # Empty dns/search mirrors the host's /etc/resolv.conf (loopback resolvers
-  # are filtered, with public fallback), like Docker. Override to pin resolvers.
-  dns: []
-  search: []
+  dns: [] # non-loopback IPv4 nameservers; [] mirrors host /etc/resolv.conf
+  search: [] # search domains; [] mirrors host /etc/resolv.conf
+  datapath:
+    mode: bridge # L2 forwarding backend: ebpf | bridge
+    isolate_sandboxes: true # drop sandbox-to-sandbox traffic; true | false
+    wake_notify: true # arm wake notifications for sleeping ports; true | false

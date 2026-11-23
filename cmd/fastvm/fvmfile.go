@@ -38,6 +38,9 @@ type FVMFile struct {
 type FVMVolume struct {
 	Host     string `yaml:"host"`
 	Guest    string `yaml:"guest"`
+	Size     string `yaml:"size"`
+	Mount    string `yaml:"mount"`
+	Name     string `yaml:"name"`
 	ReadOnly bool   `yaml:"read_only"`
 }
 
@@ -69,6 +72,7 @@ type FVMSpec struct {
 	Workdir        string
 	Env            map[string]string
 	Volumes        []types.Volume
+	DataVolumes    []types.DataVolume
 	Ports          []types.PortMapping
 	NetworkEnabled bool
 	AllowHosts     []string
@@ -169,8 +173,34 @@ func LoadFVMFile(path string) (FVMSpec, error) {
 		}
 	}
 	for _, vol := range doc.Volumes {
-		if vol.Host == "" || vol.Guest == "" {
-			return FVMSpec{}, errors.New("fvmfile: each volume needs host and guest")
+		if vol.Host != "" && vol.Size != "" {
+			return FVMSpec{}, errors.New("fvmfile: volume cannot have both host and size")
+		}
+		if vol.Host == "" && vol.Size == "" {
+			return FVMSpec{}, errors.New("fvmfile: volume needs host or size")
+		}
+		if vol.Size != "" {
+			if vol.ReadOnly {
+				return FVMSpec{}, errors.New("fvmfile: data volumes are always writable")
+			}
+			sizeGB, err := parseVolumeSizeGiB(vol.Size)
+			if err != nil {
+				return FVMSpec{}, fmt.Errorf("fvmfile: %w", err)
+			}
+			mount := vol.Mount
+			if mount == "" {
+				mount = "/data"
+			}
+			if !filepath.IsAbs(mount) || filepath.Clean(mount) != mount || mount == "/" {
+				return FVMSpec{}, fmt.Errorf("fvmfile: volume mount %q must be absolute below /", mount)
+			}
+			spec.DataVolumes = append(spec.DataVolumes, types.DataVolume{
+				Name: vol.Name, SizeGB: sizeGB, Mount: mount,
+			})
+			continue
+		}
+		if vol.Guest == "" {
+			return FVMSpec{}, errors.New("fvmfile: each host volume needs guest")
 		}
 		host := vol.Host
 		if !filepath.IsAbs(host) {

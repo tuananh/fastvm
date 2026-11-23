@@ -14,7 +14,7 @@ import (
 	"fastvm/internal/types"
 )
 
-// Supported CoW clone modes (docs/DESIGN.md §5.4 volume.cow).
+// Supported CoW clone modes (docs/DESIGN.md §5.4 storage.cow).
 const (
 	// COWReflink clones with the FICLONE ioctl (XFS/Btrfs and other reflink
 	// filesystems); falls back to a copy on filesystems that do not support it.
@@ -144,7 +144,7 @@ func (m *FSManager) Create(ctx context.Context, sandboxID string, base types.Bas
 	switch mode {
 	case COWReflink, COWCopy:
 	case COWDMThin:
-		return Volume{}, fmt.Errorf("%w (fastvm does not create device-mapper snapshots); set volume.cow to %q on XFS/Btrfs or %q",
+		return Volume{}, fmt.Errorf("%w (fastvm does not create device-mapper snapshots); set storage.cow to %q on XFS/Btrfs or %q",
 			ErrDMThinUnsupported, COWReflink, COWCopy)
 	default:
 		return Volume{}, fmt.Errorf("volume: invalid clone mode %q (want reflink|copy|dm-thin)", mode)

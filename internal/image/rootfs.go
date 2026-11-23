@@ -64,6 +64,22 @@ while :; do
 	i=$((i + 1))
 done
 
+# Block data volumes: fastvm.data.<n>=<mount>, root disk is vda.
+i=0
+while :; do
+	spec=""
+	for tok in $(cat /proc/cmdline); do
+		case "$tok" in
+		"fastvm.data.$i="*) spec=${tok#fastvm.data.$i=} ;;
+		esac
+	done
+	[ -n "$spec" ] || break
+	mkdir -p "$spec" 2>/dev/null || true
+	mount -t ext4 "/dev/vd$(printf \\$(printf '%03o' $((98 + i))))" "$spec" 2>/dev/null ||
+		echo "fastvm: warning: could not mount data volume at $spec"
+	i=$((i + 1))
+done
+
 if [ -x /usr/local/bin/fastvm-agent ]; then
 	exec /usr/local/bin/fastvm-agent
 fi

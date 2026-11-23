@@ -219,6 +219,9 @@ func bootArgs(cfg vmm.BootConfig, paths vmPaths, fsSocks []string) []string {
 		"--serial", "file=" + paths.serial,
 		"--console", "off",
 	}
+	for _, path := range cfg.DataDisks {
+		args = append(args, "--disk", fmt.Sprintf("path=%s,image_type=raw", path))
+	}
 	if cfg.TAPName != "" {
 		args = append(args, "--net", fmt.Sprintf("tap=%s,mac=%s", cfg.TAPName, cfg.MAC))
 	}

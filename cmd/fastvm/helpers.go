@@ -12,6 +12,86 @@ import (
 	"fastvm/internal/types"
 )
 
+// parseVolumeSizeGiB parses "8GiB", "8G", "8GB", or "8".
+func parseVolumeSizeGiB(s string) (int, error) {
+	v := strings.ToUpper(strings.TrimSpace(s))
+	switch {
+	case strings.HasSuffix(v, "GIB"):
+		v = strings.TrimSuffix(v, "GIB")
+	case strings.HasSuffix(v, "GB"):
+		v = strings.TrimSuffix(v, "GB")
+	case strings.HasSuffix(v, "G"):
+		v = strings.TrimSuffix(v, "G")
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("invalid volume size %q (use GiB, e.g. 8GiB)", s)
+	}
+	return n, nil
+}
+
+// parseDataVolumeSpec parses "size=8GiB,mount=/data[,name=data]".
+func parseDataVolumeSpec(spec string) (types.DataVolume, error) {
+	var out types.DataVolume
+	seenSize := false
+	for _, part := range strings.Split(spec, ",") {
+		k, v, ok := strings.Cut(part, "=")
+		if !ok {
+			return types.DataVolume{}, fmt.Errorf("invalid volume %q: expected key=value entries", spec)
+		}
+		switch strings.TrimSpace(k) {
+		case "size":
+			n, err := parseVolumeSizeGiB(v)
+			if err != nil {
+				return types.DataVolume{}, err
+			}
+			out.SizeGB, seenSize = n, true
+		case "mount":
+			out.Mount = strings.TrimSpace(v)
+		case "name":
+			out.Name = strings.TrimSpace(v)
+		default:
+			return types.DataVolume{}, fmt.Errorf("invalid volume %q: unknown key %q", spec, k)
+		}
+	}
+	if !seenSize {
+		return types.DataVolume{}, fmt.Errorf("invalid volume %q: size is required", spec)
+	}
+	if out.Mount == "" {
+		out.Mount = "/data"
+	}
+	if !filepath.IsAbs(out.Mount) || filepath.Clean(out.Mount) != out.Mount || out.Mount == "/" {
+		return types.DataVolume{}, fmt.Errorf("volume mount %q must be an absolute clean path below /", out.Mount)
+	}
+	return out, nil
+}
+
+// parseVolumeFlags splits repeatable --volume values into host-directory
+// volumes and block data volumes.
+func parseVolumeFlags(raw []string) ([]types.Volume, []types.DataVolume, error) {
+	var hostRaw []string
+	var data []types.DataVolume
+	for _, spec := range raw {
+		if strings.HasPrefix(spec, "/") {
+			hostRaw = append(hostRaw, spec)
+			continue
+		}
+		if !strings.Contains(spec, "=") {
+			return nil, nil, fmt.Errorf("volume %q: expected an absolute host path or size=...", spec)
+		}
+		dv, err := parseDataVolumeSpec(spec)
+		if err != nil {
+			return nil, nil, err
+		}
+		data = append(data, dv)
+	}
+	hosts, err := parseVolumes(hostRaw)
+	if err != nil {
+		return nil, nil, err
+	}
+	return hosts, data, nil
+}
+
 // parseVolumes parses repeatable --volume flags. Accepted forms:
 //
 //	/path                  same path inside the guest

@@ -12,13 +12,13 @@ func testIdleConfig() IdleConfig {
 	d := config.Default()
 	return IdleConfig{
 		Window:          d.Lifecycle.IdleWindow.D(),
-		SampleInterval:  d.Idle.SampleInterval.D(),
-		ExitHold:        d.Idle.ExitHold.D(),
-		Warmup:          d.Idle.Warmup.D(),
-		CPUThresholdPct: d.Idle.CPUThresholdPct,
-		CPUWakePct:      d.Idle.CPUWakePct,
-		BlockIOBytes:    d.Idle.BlockIOBytes,
-		KeepaliveAware:  d.Idle.KeepaliveAware,
+		SampleInterval:  d.Lifecycle.IdleDetection.SampleInterval.D(),
+		ExitHold:        d.Lifecycle.IdleDetection.ExitHold.D(),
+		Warmup:          d.Lifecycle.IdleDetection.Warmup.D(),
+		CPUThresholdPct: d.Lifecycle.IdleDetection.CPUThresholdPct,
+		CPUWakePct:      d.Lifecycle.IdleDetection.CPUWakePct,
+		BlockIOBytes:    d.Lifecycle.IdleDetection.BlockIOBytes,
+		KeepaliveAware:  d.Lifecycle.IdleDetection.KeepaliveAware,
 	}
 }
 

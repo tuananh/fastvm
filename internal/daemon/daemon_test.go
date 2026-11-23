@@ -38,9 +38,11 @@ type fakeImages struct {
 	disk    types.BaseDisk
 	getErr  error
 	removed []string
+	pulls   []image.PullSpec
 }
 
-func (f *fakeImages) Pull(context.Context, image.PullSpec) (types.BaseDisk, error) {
+func (f *fakeImages) Pull(_ context.Context, spec image.PullSpec) (types.BaseDisk, error) {
+	f.pulls = append(f.pulls, spec)
 	return f.disk, nil
 }
 func (f *fakeImages) Ingest(context.Context, image.IngestSpec) (types.BaseDisk, error) {
@@ -391,8 +393,8 @@ func newHarnessOpts(t *testing.T, sw l2switch.Switch) *harness {
 	cfg.Lifecycle.PauseAfter = config.Duration(2 * time.Minute)
 	cfg.Lifecycle.OffloadAfter = config.Duration(10 * time.Minute)
 	cfg.Lifecycle.DestroyAfter = config.Duration(24 * time.Hour)
-	cfg.Idle.SampleInterval = config.Duration(time.Second)
-	cfg.Wake.CoalesceWindow = config.Duration(100 * time.Millisecond)
+	cfg.Lifecycle.IdleDetection.SampleInterval = config.Duration(time.Second)
+	cfg.Lifecycle.WakePolicy.CoalesceWindow = config.Duration(100 * time.Millisecond)
 
 	st, err := store.Open(cfg.DataDir + "/state.db")
 	if err != nil {
