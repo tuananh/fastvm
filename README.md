@@ -28,11 +28,11 @@ snapshots, images, and volumes.
 > fastvmctl run --image python:3-alpine -- python3 -c "print('Hello from a microVM!')"
 > ```
 
-#### <img height="14" src="https://octicons-col.vercel.app/stopwatch/A770EF">&nbsp;&nbsp;Named Sandboxes
+#### <img height="14" src="https://octicons-col.vercel.app/server/A770EF">&nbsp;&nbsp;Create a Sandbox
 
 > ```sh
 > # Create and start a named sandbox
-> fastvmctl run -d --image python:3-alpine --name app -- sh -c 'sleep infinity'
+> fastvmctl run -d --net --image python:3-alpine --name app -- sh -c 'sleep infinity'
 > ```
 >
 > ```sh
@@ -45,7 +45,7 @@ snapshots, images, and volumes.
 > # Snapshot now, restore later as an independent copy.
 > fastvmctl snapshot app --name app-snap
 > fastvmctl run --from-snapshot app-snap --name app2
-> fastvmctl exec app2 -- python -c "print('An independent copy!')"
+> fastvmctl exec app2 -- python -c "print('Hello from the restored sandbox!')"
 > fastvmctl snapshot rm app-snap
 > ```
 >
