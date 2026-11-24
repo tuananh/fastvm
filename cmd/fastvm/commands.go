@@ -184,7 +184,7 @@ func (o *networkOptions) validate(cmdName string) error {
 }
 
 func newRunCmd() *cobra.Command {
-	var image, name, file, fromSnapshot, entrypoint, workdir string
+	var image, name, file, fromSnapshot, entrypoint, workdir, kernelRef string
 	var vcpus, memory int
 	var publishes, envs, volumes []string
 	var userData string
@@ -217,7 +217,10 @@ reassigned.
 
 --volume accepts a host directory share (/host[:guest][:ro]) or a writable
 block data volume (size=8GiB,mount=/data). Data volumes are cloned from a blank
-ext4 template and disable automatic sleep and snapshots.`,
+ext4 template and disable automatic sleep and snapshots.
+
+--kernel pins this sandbox to an installed kernel release from kernel ls. Without
+it the daemon's current kernel is used.`,
 		Example: `  fastvmctl run --net --image alpine -- uname -a
   fastvmctl run --net -it --image alpine -- /bin/sh
   fastvmctl run -f examples/coding-agents/codex.fvmfile
@@ -226,6 +229,7 @@ ext4 template and disable automatic sleep and snapshots.`,
   fastvmctl run --image alpine --volume /host/project:/workspace
   fastvmctl run --image alpine --name agent --no-start
   fastvmctl run --from-snapshot original-vm-20261119-182000 --name copy-1
+  fastvmctl run --image alpine --kernel ch-release-v7.2.8-20261009 -- uname -a
   fastvmctl run --name agent`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cobraCmd *cobra.Command, cmdArgs []string) error {
@@ -237,6 +241,9 @@ ext4 template and disable automatic sleep and snapshots.`,
 			}
 
 			if fromSnapshot != "" {
+				if kernelRef != "" {
+					return errors.New("--kernel does not apply with --from-snapshot")
+				}
 				if file != "" || cobraCmd.Flags().Changed("image") {
 					return errors.New("--from-snapshot cannot be combined with --image or --file")
 				}
@@ -405,7 +412,7 @@ ext4 template and disable automatic sleep and snapshots.`,
 				workload = runArgs
 			}
 			body := map[string]any{
-				"name": name, "image": image, "workdir": workdir,
+				"name": name, "image": image, "kernel": kernelRef, "workdir": workdir,
 				"vcpus": vcpus, "memory_mb": memory,
 				"ports": ports, "volumes": vols, "data_volumes": dataVols, "cmd": workload, "env": env,
 				"no_auto_sleep": noAutoSleep, "start": !noStart,
@@ -437,6 +444,7 @@ ext4 template and disable automatic sleep and snapshots.`,
 	f := cmd.Flags()
 	f.StringVarP(&file, "file", "f", "", "load sandbox config from an .fvmfile")
 	f.StringVar(&fromSnapshot, "from-snapshot", "", "boot a new sandbox from a saved snapshot")
+	f.StringVar(&kernelRef, "kernel", "", "installed kernel release for this sandbox (default: daemon current)")
 	f.StringVar(&entrypoint, "entrypoint", "", "override the image/fvmfile entrypoint")
 	f.StringVarP(&workdir, "workdir", "w", "", "guest working directory")
 	f.StringVar(&image, "image", "", "OCI image or base disk tag/digest")

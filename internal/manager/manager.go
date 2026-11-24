@@ -13,6 +13,7 @@ import (
 type CreateOptions struct {
 	Name        string
 	Image       string // base disk tag or digest
+	Kernel      string // optional installed kernel release for this sandbox
 	VCPUs       int
 	MemoryMB    int
 	Ports       []types.PortMapping

@@ -251,6 +251,9 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 	if opts.FromSnapshot != "" && opts.UserData != "" {
 		return types.Sandbox{}, fmt.Errorf("%w: user_data cannot be combined with from_snapshot", manager.ErrInvalid)
 	}
+	if opts.FromSnapshot != "" && opts.Kernel != "" {
+		return types.Sandbox{}, fmt.Errorf("%w: kernel cannot be combined with from_snapshot", manager.ErrInvalid)
+	}
 	if opts.FromSnapshot != "" && len(opts.DataVolumes) > 0 {
 		return types.Sandbox{}, fmt.Errorf("%w: data volumes cannot be combined with from_snapshot", manager.ErrInvalid)
 	}
@@ -308,6 +311,14 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 	if err != nil {
 		return types.Sandbox{}, fmt.Errorf("%w: image %q: %v", manager.ErrNotFound, opts.Image, err)
 	}
+	kernelRelease, kernelPath := d.defaultSandboxKernel()
+	if opts.Kernel != "" {
+		resolved, err := d.resolveSandboxKernel(opts.Kernel)
+		if err != nil {
+			return types.Sandbox{}, err
+		}
+		kernelRelease, kernelPath = resolved.Release, resolved.Path
+	}
 	id, err := newID()
 	if err != nil {
 		return types.Sandbox{}, err
@@ -324,7 +335,8 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 		return types.Sandbox{}, err
 	}
 	sb := types.Sandbox{
-		ID: id, Name: name, BaseDisk: base.Digest, VCPUs: vcpus, MemoryMB: mem,
+		ID: id, Name: name, BaseDisk: base.Digest, Kernel: kernelRelease, KernelPath: kernelPath,
+		VCPUs: vcpus, MemoryMB: mem,
 		State: types.StateCreating, Workdir: opts.Workdir, AutoPublish: opts.AutoPublish,
 		NoAutoSleep: opts.NoAutoSleep || len(opts.DataVolumes) > 0,
 		Ports:       opts.Ports, Volumes: opts.Volumes, DataVolumes: opts.DataVolumes,
@@ -449,9 +461,13 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 func (d *Daemon) bootLocked(ctx context.Context, rt *runtime) error {
 	sb := &rt.sb
 	_ = d.persistLocked(ctx, rt, sb)
+	kernelPath := d.cfg.KernelPath
+	if sb.KernelPath != "" {
+		kernelPath = sb.KernelPath
+	}
 	vm, err := d.vmmD.Boot(ctx, vmm.BootConfig{
 		SandboxID:   sb.ID,
-		KernelPath:  d.cfg.KernelPath,
+		KernelPath:  kernelPath,
 		DiskPath:    sb.VolumePath,
 		DataDisks:   dataDiskPaths(sb.DataVolumes),
 		VCPUs:       sb.VCPUs,

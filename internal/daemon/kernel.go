@@ -2,13 +2,16 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"fastvm/internal/kernel"
+	"fastvm/internal/manager"
 	"fastvm/internal/types"
 )
 
@@ -68,6 +71,38 @@ func parseKernelRef(release, asset string) (string, string, error) {
 		return "", "", fmt.Errorf("kernel: %q names asset %q, not %q", release, namedAsset, asset)
 	}
 	return tag, namedAsset, nil
+}
+
+// defaultSandboxKernel pins the daemon's current kernel into a new sandbox so a
+// later "kernel use" does not change kernels under an existing sandbox.
+func (d *Daemon) defaultSandboxKernel() (release, path string) {
+	path = d.cfg.KernelPath
+	if path == "" {
+		return "", ""
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	if info, err := os.Stat(path); err != nil || info.IsDir() {
+		return "", ""
+	}
+	if rel, _, ok := kernel.SplitLocalName(filepath.Base(path)); ok {
+		release = rel
+	}
+	return release, path
+}
+
+func (d *Daemon) resolveSandboxKernel(ref string) (kernel.Resolved, error) {
+	resolved, err := kernel.Resolve(d.kernelDir(), ref)
+	if errors.Is(err, kernel.ErrNotFound) {
+		available := kernel.Available(d.kernelDir())
+		if len(available) == 0 {
+			return kernel.Resolved{}, fmt.Errorf("%w: kernel %q is not installed; no kernels are installed (run fastvmctl kernel download)", manager.ErrInvalid, ref)
+		}
+		return kernel.Resolved{}, fmt.Errorf("%w: kernel %q is not installed; available: %s",
+			manager.ErrInvalid, ref, strings.Join(available, ", "))
+	}
+	return resolved, err
 }
 
 // DownloadKernel downloads and verifies a kernel into the managed directory.

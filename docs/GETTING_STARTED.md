@@ -220,7 +220,7 @@ bin/fastvmctl ps
 virtio-vsock, then runs the command after `--`. By default it waits and streams
 stdout/stderr; use `-d/--detach` to start it as a background workload and print
 only the sandbox ID/state/name.
-`--vcpus`, `--memory`, `--publish host:guest[/tcp|udp]`, `--env K=V`,
+`--vcpus`, `--memory`, `--kernel <release>`, `--publish host:guest[/tcp|udp]`, `--env K=V`,
 `--volume host[:guest][:ro]` / `-v` (repeatable), `--no-auto-sleep`,
 `-w/--workdir <dir>`, `--auto-publish`, and `--entrypoint <cmd>` (override the
 image/fvmfile entrypoint) are available. Auto-published guest TCP listeners on
@@ -418,7 +418,7 @@ image pull [--size-gb N] <tag|digest>          pull an OCI image into the base-d
 image ls                                    list cached base disks
 image rm [--force] <tag|digest>...          delete images and their tags
 run    --image <tag|digest> [flags] -- <cmd...>          create a sandbox
-       --name, --vcpus, --memory, --publish h:g[/tcp|udp], --env K=V, --no-auto-sleep
+       --name, --vcpus, --memory, --kernel <release>, --publish h:g[/tcp|udp], --env K=V, --no-auto-sleep
 ls                                          list sandboxes
 get <sandbox>                               full sandbox JSON record
 exec <sandbox> -- <cmd...>                  run a command in the guest (auto-wakes if asleep)

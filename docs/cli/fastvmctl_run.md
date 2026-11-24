@@ -28,6 +28,7 @@ With no command, it leaves the sandbox running and prints ID/state/name.
 |---|---|
 | `-f, --file FILE` | Load sandbox config from an `.fvmfile` |
 | `--image IMAGE` | OCI image or base disk tag/digest |
+| `--kernel RELEASE` | Pin an installed kernel release for this sandbox |
 | `--name NAME` | Sandbox name/ID; boots an existing sandbox when no image/file is given |
 | `--from-snapshot NAME` | Boot a new sandbox from a saved snapshot |
 | `-d, --detach` | Run in background and print sandbox ID |
@@ -59,6 +60,7 @@ fastvmctl run --image alpine --volume /host/project:/workspace
 fastvmctl run --net -it --image alpine -- /bin/sh
 fastvmctl run -f examples/coding-agents/codex.fvmfile
 fastvmctl run --image alpine --name agent --no-start
+fastvmctl run --image alpine --kernel ch-release-v7.2.8-20261009 -- uname -a
 fastvmctl run --from-snapshot original-vm-20261119-182000 --name copy-1
 ```
 

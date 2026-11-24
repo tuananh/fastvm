@@ -71,6 +71,9 @@ snapshots, images, volumes, and guest kernels.
 > fastvmctl kernel download ch-release-v7.2.8-20261009     # download + verify SHA-256
 > fastvmctl kernel use ch-release-v7.2.8-20261009          # set the daemon default
 > fastvmctl kernel ls                                      # installed + active
+>
+> # Pin one sandbox to a kernel while keeping the daemon default
+> fastvmctl run --image alpine --kernel ch-release-v7.2.8-20261009 -- uname -a
 > ```
 
 #### <img height="14" src="https://octicons-col.vercel.app/cache/A770EF">&nbsp;&nbsp;Image Management

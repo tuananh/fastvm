@@ -64,7 +64,9 @@ type BaseDisk struct {
 type Sandbox struct {
 	ID             string        `json:"id"`
 	Name           string        `json:"name"`
-	BaseDisk       string        `json:"base_disk"` // digest
+	BaseDisk       string        `json:"base_disk"`             // digest
+	Kernel         string        `json:"kernel,omitempty"`      // selected release
+	KernelPath     string        `json:"kernel_path,omitempty"` // resolved host path
 	VolumePath     string        `json:"volume_path"`
 	VCPUs          int           `json:"vcpus"`
 	MemoryMB       int           `json:"memory_mb"`

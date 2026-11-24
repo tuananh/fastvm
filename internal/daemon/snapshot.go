@@ -27,6 +27,8 @@ const snapshotVersion = 1
 type SnapshotMeta struct {
 	Version        int       `json:"version"`
 	ImageDigest    string    `json:"image_digest"`
+	Kernel         string    `json:"kernel,omitempty"`
+	KernelPath     string    `json:"kernel_path,omitempty"`
 	VCPUs          int       `json:"vcpus"`
 	MemoryMB       int       `json:"memory_mb"`
 	Workdir        string    `json:"workdir,omitempty"`
@@ -199,6 +201,7 @@ func (d *Daemon) snapshotLocked(ctx context.Context, rt *runtime, outDir string)
 	}
 	meta := SnapshotMeta{
 		Version: snapshotVersion, ImageDigest: sb.BaseDisk,
+		Kernel: sb.Kernel, KernelPath: sb.KernelPath,
 		VCPUs: sb.VCPUs, MemoryMB: sb.MemoryMB, Workdir: sb.Workdir,
 		NetworkEnabled: sb.NetworkEnabled, AllowHosts: sb.AllowHosts,
 		VsockCID: guestCID(sb.IP), CreatedAt: d.now(),
@@ -268,8 +271,12 @@ func (d *Daemon) createFromSnapshot(ctx context.Context, opts manager.CreateOpti
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return types.Sandbox{}, err
 	}
+	kernelPath := meta.KernelPath
+	if kernelPath == "" {
+		kernelPath = d.cfg.KernelPath
+	}
 	sb := types.Sandbox{
-		ID: id, Name: name, BaseDisk: base.Digest,
+		ID: id, Name: name, BaseDisk: base.Digest, Kernel: meta.Kernel, KernelPath: kernelPath,
 		VCPUs: meta.VCPUs, MemoryMB: meta.MemoryMB, Workdir: meta.Workdir,
 		State: types.StateStarting, NetworkEnabled: meta.NetworkEnabled,
 		AllowHosts:  meta.AllowHosts,

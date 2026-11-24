@@ -61,7 +61,8 @@ replace a mismatched file.
 
 ### `use`
 
-Point the daemon's `current` symlink at a downloaded release. Use the release
+Point the daemon's `current` symlink at a downloaded release. To pin only one
+sandbox instead, use `fastvmctl run --kernel <release>`. Use the release
 name shown by `kernel ls` and `kernel remote-ls`
 (`ch-release-v7.2.8-20261009`). New sandbox boots use the new kernel; existing
 sandboxes are untouched.

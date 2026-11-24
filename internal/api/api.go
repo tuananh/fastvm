@@ -387,6 +387,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 type createReq struct {
 	Name           string              `json:"name"`
 	Image          string              `json:"image"`
+	Kernel         string              `json:"kernel"`
 	VCPUs          int                 `json:"vcpus"`
 	MemoryMB       int                 `json:"memory_mb"`
 	Ports          []types.PortMapping `json:"ports"`
@@ -411,7 +412,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sb, err := s.rt.Create(r.Context(), manager.CreateOptions{
-		Name: req.Name, Image: req.Image, VCPUs: req.VCPUs, MemoryMB: req.MemoryMB,
+		Name: req.Name, Image: req.Image, Kernel: req.Kernel, VCPUs: req.VCPUs, MemoryMB: req.MemoryMB,
 		Ports: req.Ports, Volumes: req.Volumes, DataVolumes: req.DataVolumes, Cmd: req.Cmd, Env: req.Env, Workdir: req.Workdir, AutoPublish: req.AutoPublish, NoAutoSleep: req.NoAutoSleep,
 		Start: req.Start, NetworkEnabled: req.NetworkEnabled, AllowHosts: req.AllowHosts,
 		FromSnapshot: req.FromSnapshot, UserData: req.UserData,

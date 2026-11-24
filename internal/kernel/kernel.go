@@ -243,6 +243,73 @@ func ListLocal(dir string) ([]LocalKernel, error) {
 	return out, nil
 }
 
+// ErrNotFound means no local kernel matched a reference.
+var ErrNotFound = errors.New("kernel not found")
+
+// Resolved is a locally installed, direct-boot kernel selected by reference.
+type Resolved struct {
+	Path    string
+	Name    string
+	Release string
+	Asset   string
+}
+
+// Resolve selects a local kernel by release tag or full local name.
+func Resolve(dir, ref string) (Resolved, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return Resolved{}, fmt.Errorf("%w: empty reference", ErrNotFound)
+	}
+	arch, err := HostArch()
+	if err != nil {
+		return Resolved{}, err
+	}
+	items, err := ListLocal(dir)
+	if err != nil {
+		return Resolved{}, err
+	}
+	var matches []Resolved
+	for _, item := range items {
+		release, asset, ok := SplitLocalName(item.Name)
+		if !ok || !AssetMatchesArch(item.Name, arch) {
+			continue
+		}
+		if item.Name != ref && release != ref {
+			continue
+		}
+		matches = append(matches, Resolved{Path: item.Path, Name: item.Name, Release: release, Asset: asset})
+	}
+	switch len(matches) {
+	case 0:
+		return Resolved{}, fmt.Errorf("%w: %q", ErrNotFound, ref)
+	case 1:
+		return matches[0], nil
+	default:
+		return Resolved{}, fmt.Errorf("kernel %q is ambiguous", ref)
+	}
+}
+
+// Available returns installed direct-boot kernel names for error messages.
+func Available(dir string) []string {
+	items, err := ListLocal(dir)
+	if err != nil {
+		return nil
+	}
+	arch, _ := HostArch()
+	seen := make(map[string]bool)
+	var names []string
+	for _, item := range items {
+		release, _, ok := SplitLocalName(item.Name)
+		if !ok || !AssetMatchesArch(item.Name, arch) || seen[release] {
+			continue
+		}
+		seen[release] = true
+		names = append(names, release)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // Current returns the file that the "current" symlink points to, if any.
 func Current(dir string) (string, error) {
 	target, err := os.Readlink(filepath.Join(dir, "current"))
@@ -262,44 +329,20 @@ func Use(dir, version string) (string, error) {
 	if version == "" {
 		return "", errors.New("kernel: version is required")
 	}
-	arch, err := HostArch()
+	resolved, err := Resolve(dir, version)
 	if err != nil {
 		return "", err
-	}
-	items, err := ListLocal(dir)
-	if err != nil {
-		return "", err
-	}
-	var matches []LocalKernel
-	for _, item := range items {
-		// Accept either a full local name (<release>-<asset>) or a release tag.
-		exact := item.Name == version
-		releaseMatch := strings.HasPrefix(item.Name, version+"-")
-		if !exact && !releaseMatch {
-			continue
-		}
-		_, _, ok := SplitLocalName(item.Name)
-		if !ok || !AssetMatchesArch(item.Name, arch) {
-			continue
-		}
-		matches = append(matches, item)
-	}
-	if len(matches) == 0 {
-		return "", fmt.Errorf("kernel %q is not downloaded; run fastvmctl kernel download or choose a local name from fastvmctl kernel ls", version)
-	}
-	if len(matches) > 1 {
-		return "", fmt.Errorf("kernel %q is ambiguous: %s", version, matches[0].Name)
 	}
 	tmp := filepath.Join(dir, ".current.tmp")
 	_ = os.Remove(tmp)
-	if err := os.Symlink(matches[0].Name, tmp); err != nil {
+	if err := os.Symlink(resolved.Name, tmp); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tmp, filepath.Join(dir, "current")); err != nil {
 		_ = os.Remove(tmp)
 		return "", err
 	}
-	return matches[0].Path, nil
+	return resolved.Path, nil
 }
 
 // Download fetches and verifies one asset into dir. It returns the local path.

@@ -512,6 +512,37 @@ func TestParseKernelRef(t *testing.T) {
 	}
 }
 
+func TestCreateUsesInstalledKernel(t *testing.T) {
+	h := newHarness(t)
+	dir := t.TempDir()
+	h.d.cfg.KernelPath = filepath.Join(dir, "current")
+	name := "release-1-vmlinux-x86_64"
+	kernelPath := filepath.Join(dir, name)
+	if err := os.WriteFile(kernelPath, []byte("kernel"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sb, err := h.d.Create(context.Background(), manager.CreateOptions{
+		Name: "web", Image: "img:test", Kernel: "release-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sb.Kernel != "release-1" || sb.KernelPath != kernelPath {
+		t.Fatalf("sandbox kernel = %q/%q", sb.Kernel, sb.KernelPath)
+	}
+	boot, ok := h.drv.lastBoot()
+	if !ok || boot.KernelPath != kernelPath {
+		t.Fatalf("boot kernel = %+v ok=%v", boot, ok)
+	}
+
+	_, err = h.d.Create(context.Background(), manager.CreateOptions{
+		Name: "bad", Image: "img:test", Kernel: "missing",
+	})
+	if err == nil || !strings.Contains(err.Error(), "available: release-1") {
+		t.Fatalf("missing kernel error = %v", err)
+	}
+}
+
 func TestKernelListAndUse(t *testing.T) {
 	h := newHarness(t)
 	dir := t.TempDir()
