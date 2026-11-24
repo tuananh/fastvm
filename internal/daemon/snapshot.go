@@ -257,12 +257,19 @@ func (d *Daemon) createFromSnapshot(ctx context.Context, opts manager.CreateOpti
 	if err != nil {
 		return types.Sandbox{}, err
 	}
+	name := opts.Name
+	if name == "" {
+		name, err = d.newSandboxName(ctx)
+		if err != nil {
+			return types.Sandbox{}, err
+		}
+	}
 	dir := filepath.Join(d.cfg.DataDir, "sandboxes", id)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return types.Sandbox{}, err
 	}
 	sb := types.Sandbox{
-		ID: id, Name: opts.Name, BaseDisk: base.Digest,
+		ID: id, Name: name, BaseDisk: base.Digest,
 		VCPUs: meta.VCPUs, MemoryMB: meta.MemoryMB, Workdir: meta.Workdir,
 		State: types.StateStarting, NetworkEnabled: meta.NetworkEnabled,
 		AllowHosts:  meta.AllowHosts,
@@ -271,9 +278,6 @@ func (d *Daemon) createFromSnapshot(ctx context.Context, opts manager.CreateOpti
 		SerialPath:  filepath.Join(dir, "serial.log"),
 		SnapshotDir: filepath.Join(dir, "memory"),
 		CreatedAt:   d.now(), UpdatedAt: d.now(), LastActivityAt: d.now(),
-	}
-	if sb.Name == "" {
-		sb.Name = "sb-" + id[:8]
 	}
 	volPath := filepath.Join(d.cfg.DataDir, "volumes", id+".img")
 	if err := os.MkdirAll(filepath.Dir(volPath), 0o700); err != nil {

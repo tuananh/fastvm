@@ -418,10 +418,10 @@ rm <sandbox>                                delete sandbox + volume + memory ima
 events [-n N]                               recent lifecycle events
 ```
 
-Sandboxes are addressable by full ID, full name, or any unique ID prefix
-(Docker-style) — e.g. `fastvmctl get web`, `fastvmctl get 128e1f980d2c`, or
-`fastvmctl exec 128e1f -- ...`. An ambiguous prefix returns an error listing the
-matching IDs. `FASTVM_SOCKET` or `--socket` selects the daemon socket. The demo
+Sandboxes are addressable by full ID, full name, or any unique ID/name prefix
+(Docker-style) — e.g. `fastvmctl get web`, `fastvmctl get 128e1f980d2c`,
+`fastvmctl exec 128e1f -- ...`, or `fastvmctl exec api -- ...`. An ambiguous
+prefix returns an error listing the matching sandboxes. `FASTVM_SOCKET` or `--socket` selects the daemon socket. The demo
 config puts it at `/run/fastvm/fastvm.sock`.
 
 ---

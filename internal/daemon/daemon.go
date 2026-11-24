@@ -22,6 +22,7 @@ import (
 	"fastvm/internal/image"
 	"fastvm/internal/lifecycle"
 	"fastvm/internal/manager"
+	"fastvm/internal/names"
 	"fastvm/internal/network"
 	"fastvm/internal/store"
 	l2switch "fastvm/internal/switch"
@@ -224,6 +225,28 @@ func (d *Daemon) newRuntime(id string) *runtime {
 
 // --- manager.Runtime -------------------------------------------------------
 
+// newSandboxName returns a haikunator-style name that is not already in use.
+func (d *Daemon) newSandboxName(ctx context.Context) (string, error) {
+	list, err := d.st.ListSandboxes(ctx)
+	if err != nil {
+		return "", err
+	}
+	used := make(map[string]bool, len(list))
+	for _, sb := range list {
+		used[sb.Name] = true
+	}
+	for i := 0; i < 64; i++ {
+		name, err := names.Generate()
+		if err != nil {
+			return "", err
+		}
+		if !used[name] {
+			return name, nil
+		}
+	}
+	return "", errors.New("could not generate a unique sandbox name")
+}
+
 func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.Sandbox, error) {
 	if opts.FromSnapshot != "" && opts.UserData != "" {
 		return types.Sandbox{}, fmt.Errorf("%w: user_data cannot be combined with from_snapshot", manager.ErrInvalid)
@@ -289,12 +312,19 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 	if err != nil {
 		return types.Sandbox{}, err
 	}
+	name := opts.Name
+	if name == "" {
+		name, err = d.newSandboxName(ctx)
+		if err != nil {
+			return types.Sandbox{}, err
+		}
+	}
 	dir := filepath.Join(d.cfg.DataDir, "sandboxes", id)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return types.Sandbox{}, err
 	}
 	sb := types.Sandbox{
-		ID: id, Name: opts.Name, BaseDisk: base.Digest, VCPUs: vcpus, MemoryMB: mem,
+		ID: id, Name: name, BaseDisk: base.Digest, VCPUs: vcpus, MemoryMB: mem,
 		State: types.StateCreating, Workdir: opts.Workdir, AutoPublish: opts.AutoPublish,
 		NoAutoSleep: opts.NoAutoSleep || len(opts.DataVolumes) > 0,
 		Ports:       opts.Ports, Volumes: opts.Volumes, DataVolumes: opts.DataVolumes,
@@ -304,9 +334,6 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 		SerialPath:  filepath.Join(dir, "serial.log"),
 		SnapshotDir: filepath.Join(dir, "memory"),
 		CreatedAt:   d.now(), UpdatedAt: d.now(), LastActivityAt: d.now(),
-	}
-	if sb.Name == "" {
-		sb.Name = "sb-" + id[:8]
 	}
 	d.names.Store(id, sb.Name)
 	rt := d.newRuntime(id)
@@ -539,24 +566,33 @@ func (d *Daemon) Get(ctx context.Context, ref string) (types.Sandbox, error) {
 			manager.ErrConflict, ref, joinSandboxIDs(byName))
 	}
 
-	// Docker-style unique ID prefix. Compare case-insensitively so pasted
-	// uppercase IDs still work.
+	// Docker-style unique prefix. IDs are case-insensitive (pasted uppercase
+	// IDs work); names are matched case-sensitively. A reference may match an
+	// ID prefix, a name prefix, or both, but it must resolve to one sandbox.
 	prefix := strings.ToLower(ref)
-	var byPrefix []*types.Sandbox
+	matches := make(map[string]*types.Sandbox)
 	for _, cand := range list {
-		if strings.HasPrefix(strings.ToLower(cand.ID), prefix) {
-			byPrefix = append(byPrefix, cand)
+		if strings.HasPrefix(strings.ToLower(cand.ID), prefix) ||
+			strings.HasPrefix(cand.Name, ref) {
+			matches[cand.ID] = cand
 		}
 	}
-	switch len(byPrefix) {
+	switch len(matches) {
 	case 0:
 		return types.Sandbox{}, fmt.Errorf("%w: sandbox %q", manager.ErrNotFound, ref)
 	case 1:
-		return *byPrefix[0], nil
+		for _, cand := range matches {
+			return *cand, nil
+		}
 	default:
-		return types.Sandbox{}, fmt.Errorf("%w: sandbox ID prefix %q is ambiguous (matches %s)",
-			manager.ErrConflict, ref, joinSandboxIDs(byPrefix))
+		matched := make([]*types.Sandbox, 0, len(matches))
+		for _, cand := range matches {
+			matched = append(matched, cand)
+		}
+		return types.Sandbox{}, fmt.Errorf("%w: sandbox reference %q is ambiguous (matches %s)",
+			manager.ErrConflict, ref, joinSandboxIDs(matched))
 	}
+	return types.Sandbox{}, fmt.Errorf("%w: sandbox %q", manager.ErrNotFound, ref)
 }
 
 func joinSandboxIDs(list []*types.Sandbox) string {

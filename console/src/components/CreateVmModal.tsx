@@ -389,7 +389,7 @@ export function CreateVmModal({
         <Field label="Name (optional)" htmlFor="create-name" error={errors.name}>
           <Input
             id="create-name"
-            placeholder="auto: sb-…"
+            placeholder="auto: adjective-noun-1234"
             autoComplete="off"
             value={name}
             disabled={isCreating}

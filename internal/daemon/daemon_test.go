@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -473,6 +474,20 @@ func (h *harness) runtime(t *testing.T, id string) *runtime {
 }
 
 // --- tests ---------------------------------------------------------------
+
+func TestCreateGeneratesHaikunatorName(t *testing.T) {
+	h := newHarness(t)
+	sb, err := h.d.Create(context.Background(), manager.CreateOptions{Image: "img:test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^[a-z]+-[a-z]+-[0-9]{4}$`).MatchString(sb.Name) {
+		t.Fatalf("generated name = %q", sb.Name)
+	}
+	if sb.State != types.StateRunning {
+		t.Fatalf("state = %s", sb.State)
+	}
+}
 
 func TestCreateRunning(t *testing.T) {
 	h := newHarness(t)
@@ -1060,6 +1075,7 @@ func TestGetResolvesNameAndUniqueIDPrefix(t *testing.T) {
 		{ID: "abc22222222222222222", Name: "beta"},
 		{ID: "def11111111111111111", Name: "dup"},
 		{ID: "def22222222222222222", Name: "dup"},
+		{ID: "fed11111111111111111", Name: "alpine"},
 	} {
 		if err := h.st.PutSandbox(ctx, sb); err != nil {
 			t.Fatalf("seed %s: %v", sb.ID, err)
@@ -1072,8 +1088,10 @@ func TestGetResolvesNameAndUniqueIDPrefix(t *testing.T) {
 		{"abc11111111111111111", "abc11111111111111111"}, // full ID
 		{"beta", "abc22222222222222222"},                 // exact name
 		{"abc1", "abc11111111111111111"},                 // unique ID prefix
-		{"ABC1", "abc11111111111111111"},                 // case-insensitive prefix
+		{"ABC1", "abc11111111111111111"},                 // case-insensitive ID prefix
 		{"DEF22222222222222222", "def22222222222222222"}, // uppercase full ID
+		{"alph", "abc11111111111111111"},                 // unique name prefix
+		{"bet", "abc22222222222222222"},                  // unique name prefix
 	} {
 		got, err := h.d.Get(ctx, tc.ref)
 		if err != nil {
@@ -1093,8 +1111,8 @@ func TestGetResolvesNameAndUniqueIDPrefix(t *testing.T) {
 	if _, err := h.d.Get(ctx, "dup"); !errors.Is(err, manager.ErrConflict) {
 		t.Errorf("duplicate name error = %v, want ErrConflict", err)
 	}
-	if _, err := h.d.Get(ctx, "alph"); !errors.Is(err, manager.ErrNotFound) {
-		t.Errorf("name prefix must not resolve: error = %v, want ErrNotFound", err)
+	if _, err := h.d.Get(ctx, "alp"); !errors.Is(err, manager.ErrConflict) {
+		t.Errorf("ambiguous name prefix error = %v, want ErrConflict", err)
 	}
 	if _, err := h.d.Get(ctx, "   "); !errors.Is(err, manager.ErrInvalid) {
 		t.Errorf("empty ref error = %v, want ErrInvalid", err)

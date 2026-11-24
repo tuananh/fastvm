@@ -22,6 +22,15 @@ fastvmctl run --image alpine -- uname -a
 fastvmctl exec dev -- sh -c 'ps aux'
 ```
 
+Sandbox arguments accept a full ID, full name, or any unambiguous ID/name prefix:
+
+```sh
+fastvmctl exec 128e1f -- uname -a   # unique ID prefix
+fastvmctl exec api -- uname -a      # unique name prefix
+```
+
+Ambiguous prefixes fail with an error listing the matching sandboxes.
+
 ## COMMANDS
 
 | Command | Description |
