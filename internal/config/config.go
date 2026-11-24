@@ -150,7 +150,7 @@ func Default() *Config {
 	return &Config{
 		DataDir:    "/var/lib/fastvm",
 		SocketPath: "/run/fastvm/fastvm.sock",
-		KernelPath: "/var/lib/fastvm/kernels/vmlinux",
+		KernelPath: "/var/lib/fastvm/kernels/current",
 		AgentPath:  "/var/lib/fastvm/agent/fastvm-agent",
 		InitPath:   "",
 		Lifecycle: Lifecycle{

@@ -68,6 +68,9 @@ GET  /v1/sandboxes
 POST /v1/sandboxes
 POST /v1/sandboxes/{ref}/exec
 GET  /v1/events
+GET  /v1/kernels
+POST /v1/kernels/download
+POST /v1/kernels/use
 GET  /v1/sandboxes/{ref}/shell/ws
 ```
 

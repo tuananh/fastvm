@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"fastvm/internal/agent"
 	"fastvm/internal/config"
 	"fastvm/internal/image"
+	"fastvm/internal/kernel"
 	"fastvm/internal/manager"
 	"fastvm/internal/network"
 	"fastvm/internal/store"
@@ -494,6 +496,47 @@ func TestMissingGuestFileIsNotFound(t *testing.T) {
 	sb := h.create(t)
 	if _, _, err := h.d.StatGuest(context.Background(), sb.ID, "/missing"); !errors.Is(err, manager.ErrNotFound) {
 		t.Fatalf("missing guest file error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestParseKernelRef(t *testing.T) {
+	tag, asset, err := parseKernelRef("ch-release-v7.2.8-20261002-vmlinux-x86_64", "")
+	if err != nil || tag != "ch-release-v7.2.8-20261002" || asset != "vmlinux-x86_64" {
+		t.Fatalf("full name -> %q/%q err=%v", tag, asset, err)
+	}
+	if _, _, err := parseKernelRef("ch-release-v7.2.8-20261002-vmlinux-x86_64", "bzImage-x86_64"); err == nil {
+		t.Fatal("conflicting asset should fail")
+	}
+	if tag, asset, err := parseKernelRef("ch-release-v7.2.8-20261002", "vmlinux-x86_64"); err != nil || tag != "ch-release-v7.2.8-20261002" || asset != "vmlinux-x86_64" {
+		t.Fatalf("tag -> %q/%q err=%v", tag, asset, err)
+	}
+}
+
+func TestKernelListAndUse(t *testing.T) {
+	h := newHarness(t)
+	dir := t.TempDir()
+	h.d.cfg.KernelPath = filepath.Join(dir, "current")
+	name := "release-1-vmlinux-x86_64"
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("kernel"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	list, err := h.d.ListKernels(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Dir != dir || len(list.Kernels) != 1 || list.Kernels[0].Active {
+		t.Fatalf("list = %+v", list)
+	}
+	result, err := h.d.UseKernel(context.Background(), "release-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(result.Path) != name || filepath.Base(result.Current) != "current" {
+		t.Fatalf("use = %+v", result)
+	}
+	current, err := kernel.Current(dir)
+	if err != nil || current != filepath.Join(dir, name) {
+		t.Fatalf("current = %q err=%v", current, err)
 	}
 }
 

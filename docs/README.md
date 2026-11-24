@@ -7,6 +7,7 @@
 | [Limitations](LIMITATIONS.md) | What v0.1 does not do yet, and intentional non-goals |
 | [Cloud Hypervisor migration](CLOUD_HYPERVISOR_MIGRATION.md) | Why the VMM moved from Firecracker to Cloud Hypervisor: kernel, tooling, virtio-fs host volumes, verified spike |
 | [fastvmctl CLI](cli/README.md) | Manpage-style reference for every command |
+| [Kernel management](cli/fastvmctl_kernel.md) | List, download, verify, and select guest kernels |
 | [`.fvmfile` configs](FVMFILE.md) | Declarative sandbox configs and examples |
 | [Auto-publishing ports](AUTO_PUBLISH.md) | Discover guest TCP listeners and publish them on loopback |
 | [Snapshots](SNAPSHOT.md) | Save and restore sandbox memory, device state, and writable disk |
@@ -29,6 +30,7 @@ cmd/fastvm-agent/      guest agent (static, injected into base disks)
 internal/api/          HTTP/JSON API
 internal/image/       OCI registry pull → rootfs → ext4 base disk
 internal/volume/       CoW runtime volumes
+internal/kernel/       guest kernel inventory and verified downloads
 internal/vmm/          VMM interface; cloudhypervisor/ driver
 internal/agent/        vsock wire protocol + host client
 internal/network/      netns/veth/TAP/bridge/NAT + wake detection

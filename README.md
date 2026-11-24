@@ -20,7 +20,7 @@ virtio-fs.
 ## CLI
 
 The `fastvmctl` CLI provides a complete interface for managing sandboxes,
-snapshots, images, and volumes.
+snapshots, images, volumes, and guest kernels.
 
 #### <img height="14" src="https://octicons-col.vercel.app/play/A770EF">&nbsp;&nbsp;Run a Command
 
@@ -62,6 +62,15 @@ snapshots, images, and volumes.
 > fastvmctl logs app
 > fastvmctl logs --source console app
 > fastvmctl logs -f app
+> ```
+
+#### <img height="14" src="https://octicons-col.vercel.app/package/A770EF">&nbsp;&nbsp;Kernel Management
+
+> ```sh
+> fastvmctl kernel remote-ls                              # kernels in cloud-hypervisor/linux
+> fastvmctl kernel download ch-release-v7.2.8-20261009     # download + verify SHA-256
+> fastvmctl kernel use ch-release-v7.2.8-20261009          # set the daemon default
+> fastvmctl kernel ls                                      # installed + active
 > ```
 
 #### <img height="14" src="https://octicons-col.vercel.app/cache/A770EF">&nbsp;&nbsp;Image Management
@@ -165,6 +174,7 @@ directly from OCI registries; no Docker daemon or CLI is required.
 | [CoW volumes](docs/SETUP_COW_VOLUME.md) | Loopback XFS setup, reflink verification |
 | [Cloud Hypervisor migration](docs/CLOUD_HYPERVISOR_MIGRATION.md) | Why the VMM moved from Firecracker to Cloud Hypervisor, kernel/tooling, virtio-fs volumes |
 | [fastvmctl CLI](docs/cli/README.md) | Manpage-style reference for every command |
+| [Kernel management](docs/cli/fastvmctl_kernel.md) | List, download, verify, and select guest kernels |
 | [`.fvmfile` configs](docs/FVMFILE.md) | Declarative sandbox configs for coding agents and reproducible runs |
 | [Auto-publishing ports](docs/AUTO_PUBLISH.md) | Discover guest TCP listeners and publish them on 127.0.0.1 |
 | [Snapshots](docs/SNAPSHOT.md) | Save and restore sandbox memory, device state, and writable disk |

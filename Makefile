@@ -64,6 +64,8 @@ FASTVM ?= $(BIN)/fastvmctl
 
 assets:
 	./test/e2e/fetch-assets.sh
+	mkdir -p /tmp/fastvm/kernels
+	ln -sfn "$(abspath test/e2e/assets/vmlinux.bin)" /tmp/fastvm/kernels/current
 
 # Local mTLS certificates for the optional TCP API and fastvmctl.
 # Output:

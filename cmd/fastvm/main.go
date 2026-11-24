@@ -40,6 +40,7 @@ Environment:
 		"fastvmd unix socket (overrides FASTVM_HOST; default: $FASTVM_SOCKET or "+defaultSocket+")")
 	root.AddCommand(
 		newImageCmd(),
+		newKernelCmd(),
 		newRunCmd(),
 		newSnapshotCmd(),
 		newListCmd(),

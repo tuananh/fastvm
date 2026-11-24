@@ -40,6 +40,7 @@ Ambiguous prefixes fail with an error listing the matching sandboxes.
 | [`exec`](fastvmctl_exec.md) | Run a command in a sandbox |
 | [`get`](fastvmctl_get.md) | Show one sandbox as JSON |
 | [`image`](fastvmctl_image.md) | Manage base images |
+| [`kernel`](fastvmctl_kernel.md) | List, download, and verify guest kernels |
 | [`pause`](fastvmctl_pause.md) | Pause or offload a sandbox |
 | [`ps`](fastvmctl_ps.md) | List sandboxes |
 | [`resume`](fastvmctl_resume.md) | Boot or wake a sandbox |

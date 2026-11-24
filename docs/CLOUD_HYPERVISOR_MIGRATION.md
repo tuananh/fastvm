@@ -41,6 +41,10 @@ CH uses a PCI transport (the old Firecracker kernel only had virtio-mmio and no
 virtio-fs). `make assets` downloads and verifies this image into
 `test/e2e/assets/vmlinux.bin`.
 
+Kernels can also be managed at runtime with `fastvmctl kernel remote-ls`,
+`download`, and `use`; the daemon stores them under its kernel directory and
+switches the `current` symlink.
+
 Kernel cmdline stays close to the Firecracker one
 (`console=ttyS0 root=/dev/vda rw init=/init …`); CH is launched with
 `--serial file=<serial.log>`, so `ttyS0` remains the console.

@@ -11,6 +11,7 @@ Manpage-style documentation for every `fastvmctl` command.
 | [fastvmctl exec](fastvmctl_exec.md) | Run a command |
 | [fastvmctl get](fastvmctl_get.md) | Show sandbox JSON |
 | [fastvmctl image](fastvmctl_image.md) | Pull/list/remove images |
+| [fastvmctl kernel](fastvmctl_kernel.md) | List, download, and verify guest kernels |
 | [fastvmctl pause](fastvmctl_pause.md) | Pause/offload a sandbox |
 | [fastvmctl ps](fastvmctl_ps.md) | List sandboxes |
 | [fastvmctl resume](fastvmctl_resume.md) | Boot/wake a sandbox |

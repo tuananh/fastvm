@@ -17,7 +17,7 @@ Design and roadmap: [DESIGN.md](DESIGN.md). CLI/API/limits summary: [README.md](
 | Cloud Hypervisor v54+ | `cloud-hypervisor`, or the static build `cloud-hypervisor-static` (this host: `/usr/bin/cloud-hypervisor-static`, v54.0). Check with `cloud-hypervisor --version` / `cloud-hypervisor-static --version`. The daemon searches `cloud-hypervisor` then `cloud-hypervisor-static` on `PATH`; override with `vmm.binary` (absolute path) or `FASTVM_CLOUD_HYPERVISOR`. |
 | virtiofsd ≥ 1.10 | Serves host-directory volumes over virtio-fs. The distro package often ships `/usr/lib/virtiofsd` instead of putting `virtiofsd` on `PATH`; the daemon falls back to it. Only needed for `--volume` sandboxes. Override with `vmm.virtiofsd` / `FASTVM_VIRTIOFSD`. |
 | Go 1.24+ | Only to build from source. |
-| Kernel image | `make assets` downloads the pinned Cloud Hypervisor test kernel (`vmlinux-x86_64`, sha256 `edfeb8a8…a853`) into `test/e2e/assets/vmlinux.bin`; or point `kernel_path` at your own pinned kernel with virtio-pci/virtio-fs built in. |
+| Kernel image | `make assets` downloads the pinned Cloud Hypervisor test kernel (`vmlinux-x86_64`, sha256 `edfeb8a8…a853`) into `test/e2e/assets/vmlinux.bin` and links it at `/tmp/fastvm/kernels/current` for the demo config. Use `fastvmctl kernel download/use` to manage kernels through the daemon, or point `kernel_path` at your own pinned kernel with virtio-pci/virtio-fs built in. |
 | e2fsprogs (`mke2fs`), `nft` | Base disk creation and DNAT rules. |
 
 > The public sandbox this repo was developed in runs as an unprivileged user, so
@@ -43,6 +43,18 @@ rootfs into `test/e2e/assets/`, then prints those paths plus whether a Cloud
 Hypervisor binary and `virtiofsd` are available on the host (it never installs
 them).
 
+You can also manage kernels through the daemon:
+
+```sh
+fastvmctl kernel remote-ls
+fastvmctl kernel download
+fastvmctl kernel use ch-release-v7.2.8-20261009
+fastvmctl kernel ls
+```
+
+`kernel use` switches the `current` symlink that `kernel_path` points at. No sudo
+is required: the daemon writes its own kernel directory.
+
 ---
 
 ## 3. Start the daemon
@@ -54,7 +66,7 @@ anything system-wide:
 ```yaml
 data_dir: /tmp/fastvm/data
 socket_path: /run/fastvm/fastvm.sock
-kernel_path: test/e2e/assets/vmlinux.bin
+kernel_path: /tmp/fastvm/kernels/current
 agent_path: bin/fastvm-agent
 vmm: {binary: cloud-hypervisor, virtiofsd: virtiofsd}
 host_volumes: {allowed_prefixes: []}   # empty = deny all host-directory mounts
@@ -62,8 +74,9 @@ lifecycle: {idle_window: 60s, pause_after: 10m, offload_after: 30m, destroy_afte
 # ... see the file for the lifecycle/memory/network sections
 ```
 
-Its relative `kernel_path`/`agent_path` are resolved from the directory you
-start the daemon in, so run from the repo root. For a real installation, copy it
+The demo `kernel_path` is absolute (`/tmp/fastvm/kernels/current`); the relative
+`agent_path` is resolved from the directory you start the daemon in, so run from
+the repo root. For a real installation, copy it
 to `/etc/fastvm/config.yaml` and point the paths at `/var/lib/fastvm/...`.
 
 `vmm.binary` / `vmm.virtiofsd` name the executables the daemon launches: it
@@ -457,7 +470,7 @@ starting point; full schema is in `internal/config/config.go`.
 |---|---|---|
 | `data_dir` | `/tmp/fastvm-demo-data` | state, images, volumes, sandbox dirs |
 | `socket_path` | `/run/fastvm/fastvm.sock` | API unix socket |
-| `kernel_path` | `test/e2e/assets/vmlinux.bin` | pinned guest kernel (relative to cwd) |
+| `kernel_path` | `/tmp/fastvm/kernels/current` | demo kernel symlink installed by `make assets`; switch with `fastvmctl kernel use` |
 | `agent_path` | `bin/fastvm-agent` | guest agent injected into images |
 | `vmm.binary` | `cloud-hypervisor` | VMM executable (absolute path or name; falls back to `cloud-hypervisor-static`, override with `FASTVM_CLOUD_HYPERVISOR`) |
 | `vmm.virtiofsd` | `virtiofsd` | virtio-fs server for host volumes (falls back to `/usr/lib/virtiofsd`; override with `FASTVM_VIRTIOFSD`) |

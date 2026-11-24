@@ -21,7 +21,8 @@ data_dir: /tmp/fastvm-cow/data # must be writable and large enough
 socket_path: /run/fastvm/fastvm.sock # absolute path; parent directory must be writable
 
 # Guest kernel image and guest agent binary injected into new base images.
-kernel_path: test/e2e/assets/vmlinux.bin # absolute or relative to daemon cwd
+# `make assets` creates the current symlink at /tmp/fastvm/kernels/current.
+kernel_path: /tmp/fastvm/kernels/current # current kernel symlink; switch with fastvmctl kernel use
 agent_path: bin/fastvm-agent # absolute or relative to daemon cwd
 
 # VMM executables (Cloud Hypervisor is the only supported VMM).

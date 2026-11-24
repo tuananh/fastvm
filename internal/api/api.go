@@ -51,6 +51,13 @@ type MetricsProvider interface {
 	PrometheusMetrics(ctx context.Context) ([]byte, error)
 }
 
+// KernelManager is implemented by daemons that manage guest kernels.
+type KernelManager interface {
+	ListKernels(ctx context.Context) (types.KernelList, error)
+	DownloadKernel(ctx context.Context, req types.KernelDownloadRequest) (types.KernelDownloadResult, error)
+	UseKernel(ctx context.Context, release string) (types.KernelUseResult, error)
+}
+
 // ConsoleLogProvider is implemented by daemons that expose the host-captured
 // guest serial console.
 type ConsoleLogProvider interface {
@@ -67,6 +74,9 @@ type FileCopier interface {
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /metrics", s.handleMetrics)
 	s.mux.HandleFunc("GET /v1/version", s.handleVersion)
+	s.mux.HandleFunc("GET /v1/kernels", s.handleListKernels)
+	s.mux.HandleFunc("POST /v1/kernels/download", s.handleDownloadKernel)
+	s.mux.HandleFunc("POST /v1/kernels/use", s.handleUseKernel)
 	s.mux.HandleFunc("GET /v1/images", s.handleListImages)
 	s.mux.HandleFunc("POST /v1/images/pull", s.handlePullImage)
 	s.mux.HandleFunc("POST /v1/images/ingest", s.handleIngest)
@@ -215,6 +225,67 @@ func (s *Server) handleConsole(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write(data)
+}
+
+func (s *Server) handleListKernels(w http.ResponseWriter, r *http.Request) {
+	k, ok := s.rt.(KernelManager)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	list, err := k.ListKernels(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if list.Kernels == nil {
+		list.Kernels = []types.KernelInfo{}
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *Server) handleDownloadKernel(w http.ResponseWriter, r *http.Request) {
+	k, ok := s.rt.(KernelManager)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	var req types.KernelDownloadRequest
+	if err := decode(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorEnvelope{Error: err.Error()})
+		return
+	}
+	result, err := k.DownloadKernel(r.Context(), req)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleUseKernel(w http.ResponseWriter, r *http.Request) {
+	k, ok := s.rt.(KernelManager)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	var req struct {
+		Release string `json:"release"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorEnvelope{Error: err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.Release) == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorEnvelope{Error: "release is required"})
+		return
+	}
+	result, err := k.UseKernel(r.Context(), req.Release)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
