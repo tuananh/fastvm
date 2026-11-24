@@ -9,6 +9,7 @@ import {
   getVersion,
   listEvents,
   listImages,
+  listKernels,
   listSandboxes,
   pullImage,
   removeImage,
@@ -25,6 +26,7 @@ export const queryKeys = {
   sandboxStats: (ref: string) => ["sandbox-stats", ref] as const,
   sandboxLogs: (ref: string, source: SandboxLogSource) => ["sandbox-logs", ref, source] as const,
   images: ["images"] as const,
+  kernels: ["kernels"] as const,
   events: ["events"] as const,
 };
 
@@ -81,6 +83,15 @@ export function useSandboxLogs(
     queryFn: () => getSandboxLog(ref ?? "", source),
     enabled: enabled && Boolean(ref),
     refetchInterval: source === "system" ? 5_000 : 3_000,
+  });
+}
+
+/** Installed daemon kernels; rarely changes, cached for 60s. */
+export function useKernels() {
+  return useQuery({
+    queryKey: queryKeys.kernels,
+    queryFn: listKernels,
+    staleTime: 60_000,
   });
 }
 

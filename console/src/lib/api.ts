@@ -3,6 +3,7 @@ import {
   baseDiskListSchema,
   baseDiskSchema,
   eventListSchema,
+  kernelListSchema,
   sandboxListSchema,
   sandboxSchema,
   sandboxStatsSchema,
@@ -12,6 +13,7 @@ import type {
   BaseDisk,
   DataVolume,
   Event,
+  KernelList,
   Sandbox,
   SandboxStats,
   VersionInfo,
@@ -186,6 +188,11 @@ export function getSandboxStats(ref: string): Promise<SandboxStats> {
   return request(`${sandboxPath(ref)}/stats`, {}, sandboxStatsSchema);
 }
 
+/** `GET /v1/kernels` */
+export function listKernels(): Promise<KernelList> {
+  return request(`${API_PREFIX}/kernels`, {}, kernelListSchema);
+}
+
 /** `GET /v1/images` */
 export function listImages(): Promise<BaseDisk[]> {
   return request(`${API_PREFIX}/images`, {}, baseDiskListSchema);
@@ -246,6 +253,8 @@ export function deleteSandbox(ref: string): Promise<void> {
 export interface CreateSandboxInput {
   name?: string;
   image: string;
+  /** Installed kernel release; omitted uses the daemon current kernel. */
+  kernel?: string;
   vcpus?: number;
   memory_mb?: number;
   cmd?: string[];

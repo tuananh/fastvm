@@ -93,6 +93,29 @@ export const baseDiskSchema = z
   .passthrough();
 export type BaseDisk = z.infer<typeof baseDiskSchema>;
 
+/** `GET /v1/kernels` element. */
+export const kernelInfoSchema = z
+  .object({
+    name: z.string(),
+    release: z.string().optional(),
+    asset: z.string().optional(),
+    size_bytes: z.number().int(),
+    sha256: z.string().optional(),
+    active: z.boolean(),
+  })
+  .passthrough();
+export type KernelInfo = z.infer<typeof kernelInfoSchema>;
+
+/** `GET /v1/kernels` */
+export const kernelListSchema = z
+  .object({
+    dir: z.string(),
+    current: z.string().optional(),
+    kernels: z.array(kernelInfoSchema),
+  })
+  .passthrough();
+export type KernelList = z.infer<typeof kernelListSchema>;
+
 /** `GET /v1/events` element. */
 export const eventSchema = z
   .object({

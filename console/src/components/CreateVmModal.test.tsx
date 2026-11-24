@@ -8,19 +8,30 @@ interface CreateSandboxMock {
   mutateAsync: ReturnType<typeof vi.fn>;
 }
 
-const queryMocks = vi.hoisted((): { create: CreateSandboxMock; images: unknown[] } => ({
-  create: { mutateAsync: vi.fn() },
-  images: [
-    {
-      name: "demo",
-      tags: ["demo:latest"],
-      digest: "sha256:abc123",
-      size_bytes: 64 * 1024 * 1024,
-      source: "docker",
-      created_at: "2024-06-01T00:00:00Z",
-    },
-  ],
-}));
+const queryMocks = vi.hoisted(
+  (): { create: CreateSandboxMock; images: unknown[]; kernels: unknown[] } => ({
+    create: { mutateAsync: vi.fn() },
+    kernels: [
+      {
+        name: "ch-release-v7.2.8-20261009-vmlinux-x86_64",
+        release: "ch-release-v7.2.8-20261009",
+        asset: "vmlinux-x86_64",
+        size_bytes: 48 * 1024 * 1024,
+        active: true,
+      },
+    ],
+    images: [
+      {
+        name: "demo",
+        tags: ["demo:latest"],
+        digest: "sha256:abc123",
+        size_bytes: 64 * 1024 * 1024,
+        source: "docker",
+        created_at: "2024-06-01T00:00:00Z",
+      },
+    ],
+  }),
+);
 
 vi.mock("../lib/queries", () => ({
   useImages: () => ({
@@ -32,6 +43,12 @@ vi.mock("../lib/queries", () => ({
   useCreateSandbox: () => ({
     mutateAsync: queryMocks.create.mutateAsync,
     isPending: false,
+  }),
+  useKernels: () => ({
+    data: { dir: "/tmp/fastvm/kernels", kernels: queryMocks.kernels },
+    isPending: false,
+    isError: false,
+    error: null,
   }),
 }));
 
@@ -247,5 +264,34 @@ describe("CreateVmModal empty image store", () => {
     } finally {
       queryMocks.images = previousImages;
     }
+  });
+});
+
+describe("CreateVmModal kernel", () => {
+  it("sends the selected kernel release", async () => {
+    renderModal();
+    chooseImage();
+    fireEvent.change(screen.getByRole("combobox", { name: /Kernel/ }), {
+      target: { value: "ch-release-v7.2.8-20261009" },
+    });
+    submit();
+
+    await waitFor(() => {
+      expect(queryMocks.create.mutateAsync).toHaveBeenCalledTimes(1);
+    });
+    const input = queryMocks.create.mutateAsync.mock.calls[0][0] as { kernel?: string };
+    expect(input.kernel).toBe("ch-release-v7.2.8-20261009");
+  });
+
+  it("omits the kernel when the daemon default is selected", async () => {
+    renderModal();
+    chooseImage();
+    submit();
+
+    await waitFor(() => {
+      expect(queryMocks.create.mutateAsync).toHaveBeenCalledTimes(1);
+    });
+    const input = queryMocks.create.mutateAsync.mock.calls[0][0] as { kernel?: string };
+    expect(input.kernel).toBeUndefined();
   });
 });

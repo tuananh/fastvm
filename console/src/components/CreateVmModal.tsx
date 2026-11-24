@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type { CreateSandboxInput } from "../lib/api";
-import { useCreateSandbox, useImages } from "../lib/queries";
+import { useCreateSandbox, useImages, useKernels } from "../lib/queries";
 import { Button, Field, Input, Modal, Select, Switch, useToast } from "../ui";
 import { describeError } from "../utils/errors";
 import { formatBytes, imageLabel } from "../utils/format";
@@ -100,10 +100,12 @@ export function CreateVmModal({
 }: CreateVmModalProps) {
   const toast = useToast();
   const images = useImages();
+  const kernels = useKernels();
   const createSandbox = useCreateSandbox();
   const nextVolumeId = useRef(1);
 
   const [image, setImage] = useState(initialImage ?? "");
+  const [kernel, setKernel] = useState("");
   const [name, setName] = useState("");
   const [vcpus, setVcpus] = useState(DEFAULT_VCPUS);
   const [memoryMb, setMemoryMb] = useState(DEFAULT_MEMORY);
@@ -117,10 +119,15 @@ export function CreateVmModal({
 
   const isCreating = createSandbox.isPending;
   const imageList = images.data ?? [];
+  const kernelList = (kernels.data?.kernels ?? []).filter((entry, index, all) => {
+    const ref = entry.release ?? entry.name;
+    return all.findIndex((candidate) => (candidate.release ?? candidate.name) === ref) === index;
+  });
   const noImages = !images.isPending && images.isError === false && imageList.length === 0;
 
   const resetForm = () => {
     setImage(initialImage ?? "");
+    setKernel("");
     setName("");
     setVcpus(DEFAULT_VCPUS);
     setMemoryMb(DEFAULT_MEMORY);
@@ -267,6 +274,9 @@ export function CreateVmModal({
       memory_mb: Number(memoryMb),
       no_auto_sleep: noAutoSleep,
     };
+    if (kernel !== "") {
+      input.kernel = kernel;
+    }
     if (trimmedName !== "") {
       input.name = trimmedName;
     }
@@ -381,6 +391,41 @@ export function CreateVmModal({
             {imageList.map((availableImage) => (
               <option key={availableImage.digest} value={availableImage.digest}>
                 {imageLabel(availableImage)} · {formatBytes(availableImage.size_bytes)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field
+          label="Kernel"
+          htmlFor="create-kernel"
+          hint={
+            kernels.isPending ? (
+              <span>Loading kernels…</span>
+            ) : kernels.isError ? (
+              <span className="text-red-600 dark:text-red-400">
+                Could not load kernels: {describeError(kernels.error)}
+              </span>
+            ) : kernelList.length === 0 ? (
+              <span>No kernels installed; the daemon default will be used.</span>
+            ) : (
+              <span className="form-hint">
+                Installed kernels; leave empty for the daemon default.
+              </span>
+            )
+          }
+        >
+          <Select
+            id="create-kernel"
+            value={kernel}
+            disabled={isCreating || kernels.isPending}
+            onChange={(event) => setKernel(event.target.value)}
+          >
+            <option value="">Daemon default</option>
+            {kernelList.map((entry) => (
+              <option key={entry.release ?? entry.name} value={entry.release ?? entry.name}>
+                {entry.release ?? entry.name}
+                {entry.active ? " (active)" : ""}
               </option>
             ))}
           </Select>
