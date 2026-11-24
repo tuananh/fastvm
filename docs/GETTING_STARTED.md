@@ -415,6 +415,7 @@ run -f <file.fvmfile>                       create+boot from declarative config
 pause <sandbox> [--deep]                    pause; --deep also offloads guest RAM to disk
 resume <sandbox>                            resume a paused/dormant sandbox
 rm <sandbox>                                delete sandbox + volume + memory image
+logs [--source stdout,stderr,console,system] <sandbox>   captured logs (boot, app, lifecycle)
 events [-n N]                               recent lifecycle events
 ```
 

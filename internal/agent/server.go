@@ -22,9 +22,8 @@ import (
 )
 
 const (
-	// DefaultWorkloadLog is where detached workload output is appended inside
-	// the guest. It falls back to the serial console when the path is not
-	// writable.
+	// DefaultWorkloadLog is the legacy merged workload log. It falls back to
+	// the serial console when the path is not writable.
 	DefaultWorkloadLog = "/var/log/fastvm/workload.log"
 
 	// defaultExecTimeout bounds a synchronous exec request without an explicit
@@ -311,6 +310,14 @@ func (s *Server) exec(ctx context.Context, req Request) Response {
 	var stdout, stderr cappedBuffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	if f, err := s.openStreamLog(filepath.Join(filepath.Dir(s.workloadLog), "stdout.log")); err == nil {
+		cmd.Stdout = io.MultiWriter(&stdout, f)
+		defer f.Close()
+	}
+	if f, err := s.openStreamLog(filepath.Join(filepath.Dir(s.workloadLog), "stderr.log")); err == nil {
+		cmd.Stderr = io.MultiWriter(&stderr, f)
+		defer f.Close()
+	}
 
 	err := cmd.Run()
 	resp.Stdout = stdout.String()
@@ -346,26 +353,42 @@ func (s *Server) startWorkload(w Workload) error {
 	}
 	s.mu.Unlock()
 
-	out, err := s.openWorkloadLog()
-	if err != nil {
-		log.Printf("agent: workload log %s unavailable (%v); using serial console", s.workloadLog, err)
-		out = nil
+	legacy, legacyErr := s.openWorkloadLog()
+	if legacyErr != nil {
+		log.Printf("agent: workload log %s unavailable (%v); using serial console", s.workloadLog, legacyErr)
+		legacy = nil
 	}
+	stdoutLog, stdoutErr := s.openStreamLog(filepath.Join(filepath.Dir(s.workloadLog), "stdout.log"))
+	stderrLog, stderrErr := s.openStreamLog(filepath.Join(filepath.Dir(s.workloadLog), "stderr.log"))
+	closeLogs := func() {
+		for _, f := range []*os.File{legacy, stdoutLog, stderrLog} {
+			if f != nil {
+				_ = f.Close()
+			}
+		}
+	}
+
 	cmd := exec.Command(w.Argv[0], w.Argv[1:]...)
 	cmd.Env = s.commandEnv(w.Env)
 	cmd.Dir = w.Dir
-	if out != nil {
-		cmd.Stdout = out
-		cmd.Stderr = out
-	} else {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+	var stdoutW, stderrW io.Writer = os.Stdout, os.Stderr
+	if stdoutErr == nil {
+		stdoutW = stdoutLog
+		if legacy != nil {
+			stdoutW = io.MultiWriter(stdoutLog, legacy)
+		}
 	}
+	if stderrErr == nil {
+		stderrW = stderrLog
+		if legacy != nil {
+			stderrW = io.MultiWriter(stderrLog, legacy)
+		}
+	}
+	cmd.Stdout = stdoutW
+	cmd.Stderr = stderrW
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
-		if out != nil {
-			_ = out.Close()
-		}
+		closeLogs()
 		return fmt.Errorf("start workload %q: %w", w.Argv[0], err)
 	}
 
@@ -393,9 +416,7 @@ func (s *Server) startWorkload(w Workload) error {
 		st.running = false
 		st.exitCode = code
 		s.mu.Unlock()
-		if out != nil {
-			_ = out.Close()
-		}
+		closeLogs()
 		log.Printf("agent: workload exited code=%d argv=%v", code, st.argv)
 		s.broadcast(Event{Type: EventWorkloadExit, Code: code, Message: strings.Join(st.argv, " ")})
 	}()
@@ -446,6 +467,13 @@ func (s *Server) replayState(c *conn) {
 	if busy {
 		_ = c.send(Event{Type: EventWorkloadBusy, Message: "busy=true"})
 	}
+}
+
+func (s *Server) openStreamLog(path string) (*os.File, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return nil, err
+	}
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
 }
 
 func (s *Server) openWorkloadLog() (*os.File, error) {

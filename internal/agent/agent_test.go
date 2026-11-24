@@ -190,6 +190,28 @@ func TestClientExec(t *testing.T) {
 	}
 }
 
+func TestExecCapturesStreamLogs(t *testing.T) {
+	f := startAgentServer(t)
+	cl := dialTestClient(t, f.sock)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	resp, err := cl.Exec(ctx, Request{Argv: []string{"/bin/sh", "-c", "echo out; echo err >&2"}})
+	if err != nil || resp.ExitCode != 0 {
+		t.Fatalf("Exec: %+v err=%v", resp, err)
+	}
+	dir := filepath.Dir(f.srv.workloadLog)
+	for name, want := range map[string]string{"stdout.log": "out\n", "stderr.log": "err\n"} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if string(data) != want {
+			t.Errorf("%s = %q, want %q", name, data, want)
+		}
+	}
+}
+
 func TestClientExecTimeout(t *testing.T) {
 	f := startAgentServer(t)
 	cl := dialTestClient(t, f.sock)

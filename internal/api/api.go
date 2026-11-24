@@ -51,6 +51,12 @@ type MetricsProvider interface {
 	PrometheusMetrics(ctx context.Context) ([]byte, error)
 }
 
+// ConsoleLogProvider is implemented by daemons that expose the host-captured
+// guest serial console.
+type ConsoleLogProvider interface {
+	ConsoleLog(ctx context.Context, ref string) ([]byte, error)
+}
+
 // FileCopier is implemented by daemons that support guest file transfer.
 type FileCopier interface {
 	CopyToGuest(ctx context.Context, ref, path string, mode os.FileMode, r io.Reader) error
@@ -71,6 +77,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/sandboxes/{ref}/stats", s.handleStats)
 	s.mux.HandleFunc("PUT /v1/sandboxes/{ref}/file", s.handleCopyTo)
 	s.mux.HandleFunc("GET /v1/sandboxes/{ref}/file", s.handleCopyFrom)
+	s.mux.HandleFunc("GET /v1/sandboxes/{ref}/console", s.handleConsole)
 	s.mux.HandleFunc("DELETE /v1/sandboxes/{ref}", s.handleDelete)
 	s.mux.HandleFunc("POST /v1/sandboxes/{ref}/exec", s.handleExec)
 	s.mux.HandleFunc("POST /v1/sandboxes/{ref}/shell", s.handleShell)
@@ -193,6 +200,21 @@ func (s *Server) handleCopyFrom(w http.ResponseWriter, r *http.Request) {
 		// The response has already started; log-only is the best we can do here.
 		s.log.Warn("copy from guest failed", "sandbox", r.PathValue("ref"), "path", path, "err", err)
 	}
+}
+
+func (s *Server) handleConsole(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.rt.(ConsoleLogProvider)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := c.ConsoleLog(r.Context(), r.PathValue("ref"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write(data)
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {

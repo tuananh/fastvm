@@ -56,6 +56,13 @@ snapshots, images, and volumes.
 > fastvmctl resume app
 > fastvmctl rm app app2
 > ```
+>
+> ```sh
+> # Application logs and boot/kernel console
+> fastvmctl logs app
+> fastvmctl logs --source console app
+> fastvmctl logs -f app
+> ```
 
 #### <img height="14" src="https://octicons-col.vercel.app/cache/A770EF">&nbsp;&nbsp;Image Management
 
