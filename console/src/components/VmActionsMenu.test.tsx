@@ -38,6 +38,7 @@ describe("VmActionsMenu", () => {
         onAction={onAction}
         onDetails={onDetails}
         onExec={() => {}}
+        onLogs={() => {}}
       />,
     );
 
@@ -63,6 +64,7 @@ describe("VmActionsMenu", () => {
                 onAction={onAction}
                 onDetails={() => {}}
                 onExec={() => {}}
+                onLogs={() => {}}
               />
             </td>
           </tr>
@@ -86,6 +88,7 @@ describe("VmActionsMenu", () => {
         onAction={() => {}}
         onDetails={() => {}}
         onExec={() => {}}
+        onLogs={() => {}}
       />,
     );
 
@@ -106,6 +109,7 @@ describe("VmActionsMenu", () => {
         onAction={() => {}}
         onDetails={() => {}}
         onExec={onExec}
+        onLogs={() => {}}
       />,
     );
 
@@ -115,6 +119,26 @@ describe("VmActionsMenu", () => {
 
     fireEvent.click(terminalItem);
     expect(onExec).toHaveBeenCalledWith(sandbox);
+  });
+
+  it("opens the log viewer", async () => {
+    installDomStubs();
+    const onLogs = vi.fn();
+
+    render(
+      <VmActionsMenu
+        sandbox={sandbox}
+        pending={null}
+        onAction={() => {}}
+        onDetails={() => {}}
+        onExec={() => {}}
+        onLogs={onLogs}
+      />,
+    );
+
+    await openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "View logs" }));
+    expect(onLogs).toHaveBeenCalledWith(sandbox);
   });
 
   it("disables the terminal action while the sandbox is still being created", async () => {
@@ -127,6 +151,7 @@ describe("VmActionsMenu", () => {
         onAction={() => {}}
         onDetails={() => {}}
         onExec={() => {}}
+        onLogs={() => {}}
       />,
     );
 

@@ -15,6 +15,14 @@ import (
 
 const copyChunkSize = 1 << 20
 
+func guestFileError(err error) error {
+	if errors.Is(err, os.ErrNotExist) ||
+		strings.Contains(strings.ToLower(err.Error()), "no such file or directory") {
+		return fmt.Errorf("%w: %v", manager.ErrNotFound, err)
+	}
+	return err
+}
+
 // GuestPath resolves a guest path relative to the sandbox workdir.
 func guestPath(sb *types.Sandbox, p string) (string, error) {
 	p = strings.TrimSpace(p)
@@ -110,7 +118,7 @@ func (d *Daemon) CopyFromGuest(ctx context.Context, ref, path string, w io.Write
 	}
 	size, mode, err := ac.FileStat(ctx, guest)
 	if err != nil {
-		return 0, 0, fmt.Errorf("copy from guest: %w", err)
+		return 0, 0, fmt.Errorf("copy from guest: %w", guestFileError(err))
 	}
 	var offset int64
 	for offset < size {
@@ -163,7 +171,7 @@ func (d *Daemon) StatGuest(ctx context.Context, ref, path string) (os.FileMode, 
 	}
 	size, mode, err := ac.FileStat(ctx, guest)
 	if err != nil {
-		return 0, 0, fmt.Errorf("stat guest file: %w", err)
+		return 0, 0, fmt.Errorf("stat guest file: %w", guestFileError(err))
 	}
 	return os.FileMode(mode), size, nil
 }

@@ -32,6 +32,7 @@ export interface VmTableProps {
   onDetails: (sandbox: Sandbox) => void;
   onAction: (kind: VmActionKind, sandbox: Sandbox) => void;
   onExec: (sandbox: Sandbox) => void;
+  onLogs: (sandbox: Sandbox) => void;
 }
 
 const PAGE_SIZE = 10;
@@ -98,6 +99,7 @@ export function VmTable({
   onDetails,
   onAction,
   onExec,
+  onLogs,
 }: VmTableProps) {
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
@@ -469,6 +471,7 @@ export function VmTable({
                         onAction={onAction}
                         onDetails={onDetails}
                         onExec={onExec}
+                        onLogs={onLogs}
                       />
                     </td>
                   </tr>

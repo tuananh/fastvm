@@ -489,6 +489,14 @@ func TestCreateGeneratesHaikunatorName(t *testing.T) {
 	}
 }
 
+func TestMissingGuestFileIsNotFound(t *testing.T) {
+	h := newHarness(t)
+	sb := h.create(t)
+	if _, _, err := h.d.StatGuest(context.Background(), sb.ID, "/missing"); !errors.Is(err, manager.ErrNotFound) {
+		t.Fatalf("missing guest file error = %v, want ErrNotFound", err)
+	}
+}
+
 func TestConsoleLogReadsHostSerial(t *testing.T) {
 	h := newHarness(t)
 	sb := h.create(t)

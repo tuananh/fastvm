@@ -22,7 +22,7 @@ import {
   type PendingAction,
   type VmActionKind,
 } from "./vmActions";
-import { MoonIcon, PauseIcon, PlayIcon, TerminalIcon, TrashIcon } from "./icons";
+import { ListBulletIcon, MoonIcon, PauseIcon, PlayIcon, TerminalIcon, TrashIcon } from "./icons";
 import { UtilizationBar } from "./UtilizationBar";
 import { VmStatusTag } from "./VmStatusTag";
 
@@ -35,6 +35,8 @@ export interface VmDetailDrawerProps {
   onAction: (kind: VmActionKind, sandbox: Sandbox) => void;
   /** Open an interactive shell; wakes paused/dormant sandboxes. */
   onExec: (sandbox: Sandbox) => void;
+  /** Open the captured log viewer. */
+  onLogs: (sandbox: Sandbox) => void;
 }
 
 type Tone = "neutral" | "success" | "warning" | "danger" | "info" | "accent";
@@ -177,6 +179,7 @@ export function VmDetailDrawer({
   onClose,
   onAction,
   onExec,
+  onLogs,
 }: VmDetailDrawerProps) {
   const stats = useSandboxStats(sandbox?.id);
   const events = useEvents(100);
@@ -298,6 +301,9 @@ export function VmDetailDrawer({
           icon={<TerminalIcon className="size-4" />}
         >
           Open terminal
+        </Button>
+        <Button onClick={() => onLogs(sandbox)} icon={<ListBulletIcon className="size-4" />}>
+          Logs
         </Button>
         <Button
           onClick={() => onAction("pause", sandbox)}

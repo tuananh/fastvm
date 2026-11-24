@@ -77,6 +77,7 @@ export const SunIcon = outline(Sun);
 export const ActivityIcon = outline(ChartBar);
 export const ClockIcon = outline(Clock);
 export const TerminalIcon = outline(CommandLine);
+export const ListBulletIcon = outline(ListBullet);
 export const CpuIcon = outline(CpuChip);
 export const MemoryIcon = outline(ServerStack);
 export const NetworkIcon = outline(GlobeAlt);

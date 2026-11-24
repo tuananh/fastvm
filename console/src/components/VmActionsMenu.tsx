@@ -12,6 +12,7 @@ import {
 } from "./vmActions";
 import {
   InfoIcon,
+  ListBulletIcon,
   MoonIcon,
   MoreIcon,
   PauseIcon,
@@ -27,6 +28,8 @@ export interface VmActionsMenuProps {
   onDetails: (sandbox: Sandbox) => void;
   /** Open an interactive shell; wakes paused/dormant sandboxes. */
   onExec: (sandbox: Sandbox) => void;
+  /** Open the captured log viewer. */
+  onLogs: (sandbox: Sandbox) => void;
 }
 
 /**
@@ -40,6 +43,7 @@ export function VmActionsMenu({
   onAction,
   onDetails,
   onExec,
+  onLogs,
 }: VmActionsMenuProps) {
   const busy = pending !== null;
 
@@ -59,6 +63,14 @@ export function VmActionsMenu({
       disabled: busy || !canExec(sandbox.state),
       onClick: () => {
         onExec(sandbox);
+      },
+    },
+    {
+      key: "logs",
+      label: "View logs",
+      icon: <ListBulletIcon className="size-4" />,
+      onClick: () => {
+        onLogs(sandbox);
       },
     },
     {

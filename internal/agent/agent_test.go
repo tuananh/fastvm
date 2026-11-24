@@ -190,6 +190,16 @@ func TestClientExec(t *testing.T) {
 	}
 }
 
+func TestNewServerCreatesStreamLogs(t *testing.T) {
+	dir := t.TempDir()
+	_ = NewServer(filepath.Join(dir, "workload.log"))
+	for _, name := range []string{"stdout.log", "stderr.log"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("%s was not created: %v", name, err)
+		}
+	}
+}
+
 func TestExecCapturesStreamLogs(t *testing.T) {
 	f := startAgentServer(t)
 	cl := dialTestClient(t, f.sock)

@@ -95,6 +95,17 @@ export async function request<T>(
   return schema.parse(payload);
 }
 
+async function requestText(path: string): Promise<string> {
+  const response = await fetch(path, { headers: { Accept: "text/plain" } });
+  if (!response.ok) {
+    if (response.status === 404) {
+      return "";
+    }
+    throw await toApiError(response);
+  }
+  return response.text();
+}
+
 const API_PREFIX = "/v1";
 
 function sandboxPath(ref: string): string {
@@ -114,6 +125,60 @@ export function listSandboxes(): Promise<Sandbox[]> {
 /** `GET /v1/sandboxes/{ref}` */
 export function getSandbox(ref: string): Promise<Sandbox> {
   return request(sandboxPath(ref), {}, sandboxSchema);
+}
+
+/** Log source exposed by the console. PTY output is intentionally absent. */
+export type SandboxLogSource = "app" | "console" | "system";
+
+const GUEST_STDOUT = "/var/log/fastvm/stdout.log";
+const GUEST_STDERR = "/var/log/fastvm/stderr.log";
+
+async function getGuestLog(ref: string, path: string): Promise<string> {
+  const params = new URLSearchParams({ path });
+  try {
+    return await requestText(`${sandboxPath(ref)}/file?${params.toString()}`);
+  } catch (error) {
+    // A freshly created sandbox has no log file yet. Older daemons surface this
+    // as a 500 "no such file" error; treat it as an empty log.
+    if (error instanceof ApiError && /no such file or directory/i.test(error.message)) {
+      return "";
+    }
+    throw error;
+  }
+}
+
+/** `GET /v1/sandboxes/{ref}/console` */
+export function getSandboxConsole(ref: string): Promise<string> {
+  return requestText(`${sandboxPath(ref)}/console`);
+}
+
+/** Captured logs for one console source. */
+export async function getSandboxLog(ref: string, source: SandboxLogSource): Promise<string> {
+  if (source === "console") {
+    return getSandboxConsole(ref);
+  }
+  if (source === "system") {
+    const [events, sandbox] = await Promise.all([listEvents(1000), getSandbox(ref)]);
+    return events
+      .filter((event) => event.sandbox_id === sandbox.id)
+      .map((event) => `${event.time} ${event.type.padEnd(7)} ${event.message}`)
+      .join("\n");
+  }
+  const [stdout, stderr] = await Promise.all([
+    getGuestLog(ref, GUEST_STDOUT),
+    getGuestLog(ref, GUEST_STDERR),
+  ]);
+  if (stdout === "" && stderr === "") {
+    return "";
+  }
+  const parts: string[] = [];
+  if (stdout !== "") {
+    parts.push(`==> stdout <==\n${stdout.replace(/\n$/, "")}`);
+  }
+  if (stderr !== "") {
+    parts.push(`==> stderr <==\n${stderr.replace(/\n$/, "")}`);
+  }
+  return parts.join("\n");
 }
 
 /** `GET /v1/sandboxes/{ref}/stats` */

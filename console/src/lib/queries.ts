@@ -4,6 +4,7 @@ import {
   createSandbox,
   deleteSandbox,
   getSandbox,
+  getSandboxLog,
   getSandboxStats,
   getVersion,
   listEvents,
@@ -14,7 +15,7 @@ import {
   sleepSandbox,
   wakeSandbox,
 } from "./api";
-import type { CreateSandboxInput, PullImageInput } from "./api";
+import type { CreateSandboxInput, PullImageInput, SandboxLogSource } from "./api";
 
 /** Stable TanStack Query keys. Mutations invalidate by key prefix. */
 export const queryKeys = {
@@ -22,6 +23,7 @@ export const queryKeys = {
   sandboxes: ["sandboxes"] as const,
   sandbox: (ref: string) => ["sandbox", ref] as const,
   sandboxStats: (ref: string) => ["sandbox-stats", ref] as const,
+  sandboxLogs: (ref: string, source: SandboxLogSource) => ["sandbox-logs", ref, source] as const,
   images: ["images"] as const,
   events: ["events"] as const,
 };
@@ -65,6 +67,20 @@ export function useSandboxStats(ref: string | undefined) {
     queryFn: () => getSandboxStats(ref ?? ""),
     enabled: Boolean(ref),
     refetchInterval: 2_000,
+  });
+}
+
+/** Captured logs for one sandbox source; polled while the panel is open. */
+export function useSandboxLogs(
+  ref: string | undefined,
+  source: SandboxLogSource,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: queryKeys.sandboxLogs(ref ?? "", source),
+    queryFn: () => getSandboxLog(ref ?? "", source),
+    enabled: enabled && Boolean(ref),
+    refetchInterval: source === "system" ? 5_000 : 3_000,
   });
 }
 

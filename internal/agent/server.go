@@ -88,7 +88,18 @@ func NewServer(workloadLogPath string) *Server {
 	if workloadLogPath == "" {
 		workloadLogPath = DefaultWorkloadLog
 	}
-	return &Server{workloadLog: workloadLogPath, conns: make(map[*conn]struct{})}
+	s := &Server{workloadLog: workloadLogPath, conns: make(map[*conn]struct{})}
+	// Create the stream logs eagerly so a freshly booted sandbox has readable
+	// (empty) logs instead of a missing-file error.
+	dir := filepath.Dir(workloadLogPath)
+	for _, name := range []string{"stdout.log", "stderr.log"} {
+		if f, err := s.openStreamLog(filepath.Join(dir, name)); err == nil {
+			_ = f.Close()
+		} else {
+			log.Printf("agent: create %s log: %v", name, err)
+		}
+	}
+	return s
 }
 
 // Serve accepts agent connections on ln until ctx is canceled. It returns nil

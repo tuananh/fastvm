@@ -4,6 +4,7 @@ import {
   createSandbox,
   deleteSandbox,
   getSandbox,
+  getSandboxLog,
   getSandboxStats,
   getVersion,
   listEvents,
@@ -202,6 +203,18 @@ describe("ApiError mapping", () => {
       message: "sandbox not found: nope",
       kind: "not_found",
     });
+  });
+
+  it("treats a missing guest log file as empty", async () => {
+    fetchMock.mockResolvedValue(
+      fakeResponse(
+        { error: "stat guest file: no such file or directory" },
+        500,
+        "Internal Server Error",
+      ),
+    );
+
+    await expect(getSandboxLog("web", "app")).resolves.toBe("");
   });
 
   it("falls back to the HTTP status for non-JSON error bodies", async () => {

@@ -15,6 +15,7 @@ avatar (persisted per browser).
 
 - Keycloak OIDC login (authorization code + PKCE), session persisted per tab.
 - Sandbox dashboard: state, live CPU and memory utilization, uptime, wake counts.
+- Terminal-styled log viewer from the detail drawer: application stdout/stderr, boot console, and lifecycle events.
 - Images menu: cached base images, manual pulls, removal, and Create VM with the
   selected image preselected.
 - Create VMs from base-disk images with host-directory and writable block data volumes;

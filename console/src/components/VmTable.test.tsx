@@ -49,6 +49,7 @@ function renderTable() {
         onDetails={vi.fn()}
         onAction={vi.fn()}
         onExec={vi.fn()}
+        onLogs={vi.fn()}
       />
     </QueryClientProvider>,
   );

@@ -6,6 +6,7 @@ import type { ConsoleView } from "../components/AppSidebar";
 import { CreateVmModal } from "../components/CreateVmModal";
 import { ClockIcon, PlusIcon, RefreshIcon } from "../components/icons";
 import { SummaryCards } from "../components/SummaryCards";
+import { LogsDialog } from "../components/LogsDialog";
 import { TerminalDialog } from "../components/TerminalDialog";
 import { VmDetailDrawer } from "../components/VmDetailDrawer";
 import { VmTable } from "../components/VmTable";
@@ -58,6 +59,8 @@ export default function DashboardPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [terminalTarget, setTerminalTarget] = useState<Sandbox | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [logsTarget, setLogsTarget] = useState<Sandbox | null>(null);
+  const [logsOpen, setLogsOpen] = useState(false);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -104,6 +107,11 @@ export default function DashboardPage() {
       ? null
       : (sandboxes.find((sandbox) => sandbox.id === terminalTarget.id) ?? terminalTarget);
 
+  const logsSandbox =
+    logsTarget === null
+      ? null
+      : (sandboxes.find((sandbox) => sandbox.id === logsTarget.id) ?? logsTarget);
+
   const openDetails = useCallback((sandbox: Sandbox) => {
     setDetailSnapshot(sandbox);
     setDetailRef(sandbox.id);
@@ -124,6 +132,16 @@ export default function DashboardPage() {
   const closeTerminal = useCallback(() => {
     setTerminalOpen(false);
     setTerminalTarget(null);
+  }, []);
+
+  const openLogs = useCallback((sandbox: Sandbox) => {
+    setLogsTarget(sandbox);
+    setLogsOpen(true);
+  }, []);
+
+  const closeLogs = useCallback(() => {
+    setLogsOpen(false);
+    setLogsTarget(null);
   }, []);
 
   const handleRefresh = useCallback(async () => {
@@ -201,6 +219,9 @@ export default function DashboardPage() {
       if (terminalTarget?.id === target.id) {
         closeTerminal();
       }
+      if (logsTarget?.id === target.id) {
+        closeLogs();
+      }
     } catch (error) {
       toast.error(describeError(error));
     } finally {
@@ -208,10 +229,12 @@ export default function DashboardPage() {
     }
   }, [
     closeDrawer,
+    closeLogs,
     closeTerminal,
     deleteSandbox,
     deleteTarget,
     detailRef,
+    logsTarget,
     queryClient,
     terminalTarget,
     toast,
@@ -363,6 +386,7 @@ export default function DashboardPage() {
                   onDetails={openDetails}
                   onAction={(kind, sandbox) => void handleAction(kind, sandbox)}
                   onExec={openTerminal}
+                  onLogs={openLogs}
                 />
               </section>
             </>
@@ -421,11 +445,16 @@ export default function DashboardPage() {
           onClose={closeDrawer}
           onAction={(kind, sandbox) => void handleAction(kind, sandbox)}
           onExec={openTerminal}
+          onLogs={openLogs}
         />
       ) : null}
 
       {terminalTarget !== null ? (
         <TerminalDialog sandbox={terminalSandbox} open={terminalOpen} onClose={closeTerminal} />
+      ) : null}
+
+      {logsTarget !== null ? (
+        <LogsDialog sandbox={logsSandbox} open={logsOpen} onClose={closeLogs} />
       ) : null}
     </div>
   );

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Sandbox } from "../lib/types";
 import { VmDetailDrawer } from "./VmDetailDrawer";
@@ -59,9 +59,31 @@ function renderDrawer(sandbox: Sandbox) {
       onClose={vi.fn()}
       onAction={vi.fn()}
       onExec={vi.fn()}
+      onLogs={vi.fn()}
     />,
   );
 }
+
+describe("VmDetailDrawer actions", () => {
+  it("opens the log viewer from the footer", () => {
+    const onLogs = vi.fn();
+    render(
+      <VmDetailDrawer
+        sandbox={baseSandbox}
+        open
+        images={[]}
+        pendingAction={null}
+        onClose={vi.fn()}
+        onAction={vi.fn()}
+        onExec={vi.fn()}
+        onLogs={onLogs}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Logs" }));
+    expect(onLogs).toHaveBeenCalledWith(baseSandbox);
+  });
+});
 
 describe("VmDetailDrawer host volumes", () => {
   it("shows host → guest mounts with read-only/read-write badges", async () => {
