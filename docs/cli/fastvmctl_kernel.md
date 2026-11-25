@@ -76,6 +76,7 @@ sandboxes are untouched.
 | `--release TAG` | Release tag for `download` (alternative to the positional argument) |
 | `--asset NAME` | Asset to download (default: host architecture) |
 | `--force` | Re-download even when a file exists |
+| `--set-default` | Make the downloaded kernel the daemon default |
 
 ## EXAMPLES
 
@@ -83,6 +84,7 @@ sandboxes are untouched.
 fastvmctl kernel remote-ls --limit 5
 fastvmctl kernel download
 fastvmctl kernel download ch-release-v7.2.8-20261009
+fastvmctl kernel download --set-default ch-release-v7.2.8-20261009
 fastvmctl kernel use ch-release-v7.2.8-20261009
 fastvmctl kernel ls
 ```

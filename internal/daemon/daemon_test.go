@@ -404,7 +404,10 @@ func newHarnessOpts(t *testing.T, sw l2switch.Switch) *harness {
 	cfg := config.Default()
 	cfg.DataDir = t.TempDir()
 	cfg.SocketPath = t.TempDir() + "/fastvm.sock"
-	cfg.KernelPath = "/tmp/vmlinux"
+	cfg.KernelPath = filepath.Join(t.TempDir(), "vmlinux")
+	if err := os.WriteFile(cfg.KernelPath, []byte("kernel"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	cfg.AgentPath = "/tmp/fastvm-agent"
 	cfg.Lifecycle.IdleWindow = config.Duration(30 * time.Second)
 	cfg.Lifecycle.PauseAfter = config.Duration(2 * time.Minute)
@@ -538,8 +541,17 @@ func TestCreateUsesInstalledKernel(t *testing.T) {
 	_, err = h.d.Create(context.Background(), manager.CreateOptions{
 		Name: "bad", Image: "img:test", Kernel: "missing",
 	})
-	if err == nil || !strings.Contains(err.Error(), "available: release-1") {
+	if err == nil || !strings.Contains(err.Error(), "release-1") {
 		t.Fatalf("missing kernel error = %v", err)
+	}
+}
+
+func TestCreateWithoutKernelFailsFast(t *testing.T) {
+	h := newHarness(t)
+	h.d.cfg.KernelPath = filepath.Join(t.TempDir(), "missing")
+	_, err := h.d.Create(context.Background(), manager.CreateOptions{Name: "web", Image: "img:test"})
+	if !errors.Is(err, manager.ErrInvalid) || !strings.Contains(err.Error(), "no kernel installed") {
+		t.Fatalf("create error = %v", err)
 	}
 }
 
@@ -602,7 +614,7 @@ func TestCreateRunning(t *testing.T) {
 		t.Fatalf("volume/net create count = %d/%d", len(h.vols.created), len(h.net.created))
 	}
 	boot, ok := h.drv.lastBoot()
-	if !ok || boot.KernelPath != "/tmp/vmlinux" || boot.DiskPath != sb.VolumePath {
+	if !ok || boot.KernelPath != h.d.cfg.KernelPath || boot.DiskPath != sb.VolumePath {
 		t.Fatalf("boot config = %+v", boot)
 	}
 	if boot.TAPName != sb.TAPName || boot.GuestCID == 0 {

@@ -248,6 +248,9 @@ func (d *Driver) Boot(ctx context.Context, cfg vmm.BootConfig) (vmm.VM, error) {
 	if cfg.DiskPath == "" {
 		return nil, errors.New("cloudhypervisor: BootConfig.DiskPath is required")
 	}
+	if _, err := os.Stat(cfg.KernelPath); err != nil {
+		return nil, fmt.Errorf("cloudhypervisor: kernel image %s: %w (check fastvmctl kernel ls/download/use)", cfg.KernelPath, err)
+	}
 	paths, err := d.resolvePaths(cfg.APISocket, cfg.SerialPath)
 	if err != nil {
 		return nil, err

@@ -68,7 +68,7 @@ snapshots, images, volumes, and guest kernels.
 
 > ```sh
 > fastvmctl kernel remote-ls                              # kernels in cloud-hypervisor/linux
-> fastvmctl kernel download ch-release-v7.2.8-20261009     # download + verify SHA-256
+> fastvmctl kernel download --set-default ch-release-v7.2.8-20261009 # download, verify, set default
 > fastvmctl kernel use ch-release-v7.2.8-20261009          # set the daemon default
 > fastvmctl kernel ls                                      # installed + active
 >

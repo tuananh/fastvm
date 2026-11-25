@@ -311,13 +311,18 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 	if err != nil {
 		return types.Sandbox{}, fmt.Errorf("%w: image %q: %v", manager.ErrNotFound, opts.Image, err)
 	}
-	kernelRelease, kernelPath := d.defaultSandboxKernel()
+	kernelRelease, kernelPath := "", ""
 	if opts.Kernel != "" {
 		resolved, err := d.resolveSandboxKernel(opts.Kernel)
 		if err != nil {
 			return types.Sandbox{}, err
 		}
 		kernelRelease, kernelPath = resolved.Release, resolved.Path
+	} else {
+		kernelRelease, kernelPath, err = d.defaultSandboxKernel()
+		if err != nil {
+			return types.Sandbox{}, err
+		}
 	}
 	id, err := newID()
 	if err != nil {

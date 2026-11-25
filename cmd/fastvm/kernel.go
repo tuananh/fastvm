@@ -57,7 +57,7 @@ func newKernelListCmd() *cobra.Command {
 				return err
 			}
 			if len(list.Kernels) == 0 {
-				fmt.Printf("No kernels in %s\n", list.Dir)
+				fmt.Printf("No kernels installed in %s\n\nNext:\n  fastvmctl kernel remote-ls\n  fastvmctl kernel download <release>\n", list.Dir)
 				return nil
 			}
 			tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
@@ -128,12 +128,13 @@ func newKernelRemoteListCmd() *cobra.Command {
 
 func newKernelDownloadCmd() *cobra.Command {
 	var release, assetName string
-	var force bool
+	var force, setDefault bool
 	cmd := &cobra.Command{
 		Use:   "download [release]",
 		Short: "Download and verify a kernel into the daemon",
 		Example: `  fastvmctl kernel download
   fastvmctl kernel download ch-release-v7.2.8-20261009
+  fastvmctl kernel download --set-default
   fastvmctl kernel download --asset vmlinux-x86_64`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -154,12 +155,22 @@ func newKernelDownloadCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("%s\t%s\n", result.Path, result.SHA256)
+			if setDefault {
+				var activated types.KernelUseResult
+				if err := do(http.MethodPost, "/v1/kernels/use", map[string]any{
+					"release": result.Release,
+				}, &activated); err != nil {
+					return err
+				}
+				fmt.Printf("%s -> %s\n", activated.Current, activated.Path)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&release, "release", "", "release tag (default: latest)")
 	cmd.Flags().StringVar(&assetName, "asset", "", "asset name (default: host architecture)")
 	cmd.Flags().BoolVar(&force, "force", false, "re-download even if the file exists")
+	cmd.Flags().BoolVar(&setDefault, "set-default", false, "make the downloaded kernel the daemon default")
 	return cmd
 }
 

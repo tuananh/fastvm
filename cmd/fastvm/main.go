@@ -3,7 +3,10 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
@@ -13,9 +16,27 @@ import (
 
 func main() {
 	root := newRootCmd()
-	if err := fang.Execute(context.Background(), root, fang.WithVersion(version.String())); err != nil {
+	if err := fang.Execute(context.Background(), root,
+		fang.WithVersion(version.String()), fang.WithErrorHandler(cliErrorHandler)); err != nil {
 		os.Exit(1)
 	}
+}
+
+// cliErrorHandler preserves multi-line guidance blocks from daemon errors.
+// fang's default handler reflows them into one paragraph.
+func cliErrorHandler(w io.Writer, styles fang.Styles, err error) {
+	text := err.Error()
+	if !strings.Contains(text, "\n") {
+		fang.DefaultErrorHandler(w, styles, err)
+		return
+	}
+	text = strings.TrimSpace(text)
+	if text != "" {
+		text = strings.ToUpper(text[:1]) + text[1:]
+	}
+	fmt.Fprintln(w, styles.ErrorHeader.String())
+	fmt.Fprintln(w, text)
+	fmt.Fprintln(w)
 }
 
 func newRootCmd() *cobra.Command {

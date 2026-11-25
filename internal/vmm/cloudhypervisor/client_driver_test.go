@@ -86,6 +86,20 @@ func TestMemoryParam(t *testing.T) {
 	}
 }
 
+func TestBootRejectsMissingKernel(t *testing.T) {
+	d, err := NewDriver(Options{Binary: "/bin/true", RunDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = d.Boot(context.Background(), vmm.BootConfig{
+		KernelPath: filepath.Join(t.TempDir(), "missing-vmlinux"),
+		DiskPath:   filepath.Join(t.TempDir(), "disk.img"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "kernel image") {
+		t.Fatalf("Boot error = %v", err)
+	}
+}
+
 func TestNewDriverFallsBackToStaticBinary(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"cloud-hypervisor-static", "virtiofsd"} {

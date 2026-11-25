@@ -75,21 +75,38 @@ func parseKernelRef(release, asset string) (string, string, error) {
 
 // defaultSandboxKernel pins the daemon's current kernel into a new sandbox so a
 // later "kernel use" does not change kernels under an existing sandbox.
-func (d *Daemon) defaultSandboxKernel() (release, path string) {
+func (d *Daemon) defaultSandboxKernel() (release, path string, err error) {
 	path = d.cfg.KernelPath
 	if path == "" {
-		return "", ""
+		return "", "", fmt.Errorf("%w: no kernel configured; run fastvmctl kernel download and use", manager.ErrInvalid)
 	}
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		path = resolved
 	}
-	if info, err := os.Stat(path); err != nil || info.IsDir() {
-		return "", ""
+	info, statErr := os.Stat(path)
+	if statErr != nil || info.IsDir() {
+		available := kernel.Available(d.kernelDir())
+		if len(available) == 0 {
+			return "", "", fmt.Errorf("%w: no kernel installed at %s\n\nNext:\n  fastvmctl kernel remote-ls\n  fastvmctl kernel download <release>\n  fastvmctl kernel use <release>",
+				manager.ErrInvalid, path)
+		}
+		return "", "", fmt.Errorf("%w: no kernel installed at %s\n\nInstalled kernels:\n  %s\n\nSelect one:\n  fastvmctl kernel use <release>",
+			manager.ErrInvalid, path, strings.Join(available, "\n  "))
 	}
 	if rel, _, ok := kernel.SplitLocalName(filepath.Base(path)); ok {
 		release = rel
 	}
-	return release, path
+	return release, path, nil
+}
+
+func (d *Daemon) kernelNotInstalled(ref string) error {
+	available := kernel.Available(d.kernelDir())
+	if len(available) == 0 {
+		return fmt.Errorf("%w: kernel %q is not installed\n\nNext:\n  fastvmctl kernel remote-ls\n  fastvmctl kernel download <release>\n  fastvmctl kernel use <release>",
+			manager.ErrNotFound, ref)
+	}
+	return fmt.Errorf("%w: kernel %q is not installed\n\nInstalled kernels:\n  %s\n\nSelect one:\n  fastvmctl kernel use <release>",
+		manager.ErrNotFound, ref, strings.Join(available, "\n  "))
 }
 
 func (d *Daemon) resolveSandboxKernel(ref string) (kernel.Resolved, error) {
@@ -97,10 +114,11 @@ func (d *Daemon) resolveSandboxKernel(ref string) (kernel.Resolved, error) {
 	if errors.Is(err, kernel.ErrNotFound) {
 		available := kernel.Available(d.kernelDir())
 		if len(available) == 0 {
-			return kernel.Resolved{}, fmt.Errorf("%w: kernel %q is not installed; no kernels are installed (run fastvmctl kernel download)", manager.ErrInvalid, ref)
+			return kernel.Resolved{}, fmt.Errorf("%w: kernel %q is not installed\n\nNext:\n  1. fastvmctl kernel remote-ls\n  2. fastvmctl kernel download <release>\n  3. fastvmctl kernel use <release>",
+				manager.ErrInvalid, ref)
 		}
-		return kernel.Resolved{}, fmt.Errorf("%w: kernel %q is not installed; available: %s",
-			manager.ErrInvalid, ref, strings.Join(available, ", "))
+		return kernel.Resolved{}, fmt.Errorf("%w: kernel %q is not installed\n\nInstalled kernels:\n  %s\n\nSelect one:\n  fastvmctl kernel use <release>",
+			manager.ErrInvalid, ref, strings.Join(available, "\n  "))
 	}
 	return resolved, err
 }
@@ -148,6 +166,9 @@ func (d *Daemon) DownloadKernel(ctx context.Context, req types.KernelDownloadReq
 func (d *Daemon) UseKernel(_ context.Context, release string) (types.KernelUseResult, error) {
 	dir := d.kernelDir()
 	path, err := kernel.Use(dir, release)
+	if errors.Is(err, kernel.ErrNotFound) {
+		return types.KernelUseResult{}, d.kernelNotInstalled(release)
+	}
 	if err != nil {
 		return types.KernelUseResult{}, err
 	}

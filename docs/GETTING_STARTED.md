@@ -47,7 +47,7 @@ You can also manage kernels through the daemon:
 
 ```sh
 fastvmctl kernel remote-ls
-fastvmctl kernel download
+fastvmctl kernel download --set-default
 fastvmctl kernel use ch-release-v7.2.8-20261009
 fastvmctl kernel ls
 ```

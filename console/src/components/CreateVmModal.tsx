@@ -407,7 +407,10 @@ export function CreateVmModal({
                 Could not load kernels: {describeError(kernels.error)}
               </span>
             ) : kernelList.length === 0 ? (
-              <span>No kernels installed; the daemon default will be used.</span>
+              <span>
+                No kernels installed. Run <code>fastvmctl kernel remote-ls</code>, then{" "}
+                <code>fastvmctl kernel download &lt;release&gt;</code>.
+              </span>
             ) : (
               <span className="form-hint">
                 Installed kernels; leave empty for the daemon default.
