@@ -21,6 +21,10 @@ export GITHUB_TOKEN=...
 fastvmctl run -f examples/coding-agents/copilot.fvmfile -it
 ```
 
+The Codex config runs without approval prompts inside the microVM
+(`approval_policy = "never"`, `sandbox_mode = "danger-full-access"`). This is
+still bounded by the fastvm VM and its mounted volumes.
+
 The Codex image installs `procps`, `git`, and `ripgrep` because the Node slim
 image does not include the tools Codex's app-server expects.
 
@@ -46,6 +50,12 @@ wire_api = "responses"
 
 Newer Codex versions may also expect DeepSeek's model catalog in
 `~/.codex/models.json`; the DeepSeek setup script generates it.
+
+The example uses the bundled [`codex-home/`](codex-home/) config. To use your
+own Codex configuration instead, point the fvmfile volume (or a `-v` override) at
+your config directory. The guest copies its `config.toml` into
+`/root/.codex/config.toml` before starting Codex. Make sure the host path is
+under `host_volumes.allowed_prefixes`.
 
 Mount a project directory with `-v` or add `volumes` to the fvmfile:
 

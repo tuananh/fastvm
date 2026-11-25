@@ -2,6 +2,8 @@
 # This file is mounted read-only at /etc/codex/config.toml and copied into
 # /root/.codex/config.toml by the sandbox user_data script.
 
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
 model = "deepseek-flash"
 model_provider = "deepseek"
 preferred_auth_method = "apikey"
