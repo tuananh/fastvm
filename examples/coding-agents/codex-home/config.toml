@@ -1,0 +1,17 @@
+# Codex CLI configuration for the DeepSeek API.
+# This file is mounted read-only at /etc/codex/config.toml and copied into
+# /root/.codex/config.toml by the sandbox user_data script.
+
+model = "deepseek-flash"
+model_provider = "deepseek"
+preferred_auth_method = "apikey"
+forced_login_method = "api"
+
+[model_providers.deepseek]
+name = "deepseek"
+base_url = "https://api.deepseek.com/"
+env_key = "DEEPSEEK_API_KEY"
+wire_api = "responses"
+
+[projects."/workspace"]
+trust_level = "trusted"

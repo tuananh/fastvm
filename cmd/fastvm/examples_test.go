@@ -7,6 +7,7 @@ import (
 )
 
 func TestExamplesLoad(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "test")
 	t.Setenv("OPENAI_API_KEY", "test")
 	t.Setenv("ANTHROPIC_API_KEY", "test")
 	t.Setenv("GITHUB_TOKEN", "test")

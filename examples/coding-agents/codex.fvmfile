@@ -1,9 +1,11 @@
-# OpenAI Codex coding-agent sandbox.
+# OpenAI Codex CLI sandbox using the DeepSeek API.
 #
-#   export OPENAI_API_KEY=...
+#   export DEEPSEEK_API_KEY=...
 #   fastvmctl run -f examples/coding-agents/codex.fvmfile -it
 #
 # Starts from the normal Node.js image and installs the Codex CLI on first boot.
+# codex-home/config.toml selects DeepSeek's OpenAI-compatible endpoint and is
+# copied into /root/.codex/config.toml before Codex starts.
 version: 1
 name: codex
 image: node:26-slim
@@ -12,18 +14,30 @@ entrypoint: ["codex"]
 user_data: |
   #!/bin/sh
   set -eu
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y --no-install-recommends procps git ripgrep ca-certificates
+  rm -rf /var/lib/apt/lists/*
   npm install -g --no-fund --no-audit @openai/codex
+  mkdir -p /root/.codex
+  cp /etc/codex/config.toml /root/.codex/config.toml
 
 # ${NAME} values are expanded from the host environment.
 env:
-  OPENAI_API_KEY: "${OPENAI_API_KEY}"
+  DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY}"
 
 network:
   enabled: true
   allow_hosts:
     - registry.npmjs.org
-    - api.openai.com
-    - auth.openai.com
+    - deb.debian.org
+    - security.debian.org
+    - api.deepseek.com
+
+volumes:
+  - host: codex-home
+    guest: /etc/codex
+    read_only: true
 
 resources:
   vcpus: 2

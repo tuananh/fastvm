@@ -490,7 +490,7 @@ starting point; full schema is in `internal/config/config.go`.
 | `lifecycle.wake_policy.max_wakes_per_minute` | `6` | scan protection per sandbox |
 | `lifecycle.wake_policy.coalesce_window` | `100ms` | burst coalescing |
 | `storage.cow` | `reflink` | `reflink` on XFS/btrfs, `copy` fallback |
-| `storage.root_size_gb` | `1` | base/root disk size used for new image builds; images that need more fail (existing images must be re-pulled) |
+| `storage.root_size_gb` | `8` | base/root disk size used for new image builds; images that need more fail (existing images must be re-pulled) |
 | `storage.discard_on_destroy` | `true` | remove the writable volume with the sandbox |
 | `network.datapath.mode` | `ebpf` | `ebpf` (default; automatic `bridge` fallback without CAP_BPF) or `bridge` |
 | `network.dns` | host resolvers | nameserver overrides (non-loopback IPv4); empty mirrors the host `/etc/resolv.conf`, like Docker |

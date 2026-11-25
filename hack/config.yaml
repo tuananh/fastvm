@@ -72,7 +72,7 @@ memory:
 # Writable root-disk/image storage settings.
 storage:
   cow: reflink # clone backend: reflink (XFS/Btrfs) | copy | dm-thin (not implemented)
-  root_size_gb: 1 # base/root disk GiB for new images; integer >= 1; oversized rootfs fails
+  root_size_gb: 8 # base/root disk GiB for new images; integer >= 1; oversized rootfs fails
   discard_on_destroy: true # delete writable volume with sandbox; true | false
 
 # Optional TCP JSON API with mutual TLS; the unix socket is always enabled.

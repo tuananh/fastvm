@@ -8,7 +8,7 @@ Runnable `.fvmfile` examples for common workloads. See the
 | [hello.fvmfile](hello.fvmfile) | Minimal image + command |
 | [nodejs.fvmfile](nodejs.fvmfile) | Node.js REPL |
 | [docker.fvmfile](docker.fvmfile) | Docker-in-VM with host networking |
-| [coding-agents](coding-agents/) | Codex, Claude Code, GitHub Copilot CLI |
+| [coding-agents](coding-agents/) | Codex with DeepSeek API, Claude Code, GitHub Copilot CLI |
 | [chrome-headless](chrome-headless/) | Headless Chromium with CDP |
 | [github-actions-runner](github-actions-runner/) | Self-hosted GitHub Actions runner |
 
