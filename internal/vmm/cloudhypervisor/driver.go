@@ -552,6 +552,14 @@ func (v *vm) Stop(ctx context.Context) error {
 // Wait blocks until the VMM process exits.
 func (v *vm) Wait(ctx context.Context) error { return v.proc.wait(ctx) }
 
+// Resize applies live CPU/memory/balloon changes.
+func (v *vm) Resize(ctx context.Context, cfg vmm.ResizeConfig) error {
+	if err := v.api.resize(ctx, cfg); err != nil {
+		return fmt.Errorf("cloudhypervisor: resize: %w", err)
+	}
+	return nil
+}
+
 // Stats reads host-side CPU/RSS counters for the VMM process, preferring CH's
 // per-block-device counters over /proc/<pid>/io for block I/O.
 func (v *vm) Stats(ctx context.Context) (vmm.Stats, error) {

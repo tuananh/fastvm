@@ -41,9 +41,16 @@ type CreateOptions struct {
 	UserData string
 }
 
+// ResizeOptions is a live CPU/memory resize request. Zero values are unchanged.
+type ResizeOptions struct {
+	VCPUs    int
+	MemoryMB int
+}
+
 // Runtime is the daemon-facing sandbox API.
 type Runtime interface {
 	Create(ctx context.Context, opts CreateOptions) (types.Sandbox, error)
+	Resize(ctx context.Context, ref string, opts ResizeOptions) (types.Sandbox, error)
 	Start(ctx context.Context, ref string) error
 	Snapshot(ctx context.Context, ref, name string) (string, error)
 	SnapshotCopy(ctx context.Context, from, name string) (types.Sandbox, error)

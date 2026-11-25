@@ -28,6 +28,15 @@ type BootConfig struct {
 	Volumes []types.Volume
 }
 
+// ResizeConfig requests live resource changes. Zero values leave a resource
+// unchanged. MemoryMB is the desired guest RAM size, not a delta.
+type ResizeConfig struct {
+	VCPUs         int
+	MemoryMB      int
+	BalloonMB     int
+	ResizeBalloon bool
+}
+
 // Snapshot is a paused VM snapshot on disk. The driver treats Dir as opaque
 // and reads whatever files its own snapshot format uses.
 type Snapshot struct {
@@ -63,6 +72,8 @@ type VM interface {
 	Stop(ctx context.Context) error
 	// Wait blocks until the VMM process exits.
 	Wait(ctx context.Context) error
+	// Resize applies live CPU/memory/balloon changes.
+	Resize(ctx context.Context, cfg ResizeConfig) error
 	// Stats returns current counters.
 	Stats(ctx context.Context) (Stats, error)
 	// APISocket reports the VMM API socket path.

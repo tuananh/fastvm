@@ -816,6 +816,78 @@ func (d *Daemon) Wake(ctx context.Context, ref string) error {
 	return d.wakeLocked(ctx, rt, &rt.sb)
 }
 
+// Resize applies live CPU/memory changes within the sandbox hotplug ceilings.
+func (d *Daemon) Resize(ctx context.Context, ref string, opts manager.ResizeOptions) (types.Sandbox, error) {
+	if opts.VCPUs == 0 && opts.MemoryMB == 0 {
+		return types.Sandbox{}, fmt.Errorf("%w: no resources to resize", manager.ErrInvalid)
+	}
+	rt, err := d.runtimeFor(ctx, ref)
+	if err != nil {
+		return types.Sandbox{}, err
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	sb := &rt.sb
+	if sb.State.Sleeping() {
+		if err := d.wakeLocked(ctx, rt, sb); err != nil {
+			return types.Sandbox{}, err
+		}
+	}
+	if sb.State != types.StateRunning && sb.State != types.StateIdle {
+		return types.Sandbox{}, fmt.Errorf("%w: cannot resize a %s sandbox", manager.ErrConflict, sb.State)
+	}
+	if rt.vm == nil {
+		return types.Sandbox{}, fmt.Errorf("%w: sandbox has no live VMM", manager.ErrConflict)
+	}
+	cfg := vmm.ResizeConfig{VCPUs: opts.VCPUs, MemoryMB: opts.MemoryMB}
+	maxVCPUs := sb.MaxVCPUs
+	if maxVCPUs < sb.VCPUs {
+		maxVCPUs = sb.VCPUs
+	}
+	maxMemoryMB := sb.MaxMemoryMB
+	if maxMemoryMB < sb.MemoryMB {
+		maxMemoryMB = sb.MemoryMB
+	}
+	if opts.VCPUs != 0 {
+		if opts.VCPUs < 1 || opts.VCPUs > maxVCPUs {
+			return types.Sandbox{}, fmt.Errorf("%w: cpu must be between 1 and max_cpu=%d", manager.ErrInvalid, maxVCPUs)
+		}
+	}
+	if opts.MemoryMB != 0 {
+		if opts.MemoryMB < 64 || opts.MemoryMB > maxMemoryMB {
+			return types.Sandbox{}, fmt.Errorf("%w: memory_mb must be between 64 and max_memory_mb=%d", manager.ErrInvalid, maxMemoryMB)
+		}
+	}
+	if err := rt.vm.Resize(ctx, cfg); err != nil {
+		return types.Sandbox{}, err
+	}
+	if opts.VCPUs != 0 && rt.ac != nil {
+		// Linux does not online hot-added CPUs automatically in a minimal guest.
+		req := agent.Request{
+			Argv:      []string{"/bin/sh", "-c", "for c in /sys/devices/system/cpu/cpu*/online; do [ -w \"$c\" ] && echo 1 > \"$c\" || true; done"},
+			TimeoutMS: 5000,
+		}
+		if _, err := rt.ac.Exec(ctx, req); err != nil {
+			d.log.Warn("online hot-added CPUs failed", "sandbox", sb.ID, "err", err)
+		}
+	}
+	now := d.now()
+	if opts.VCPUs != 0 {
+		sb.VCPUs = opts.VCPUs
+	}
+	if opts.MemoryMB != 0 {
+		sb.MemoryMB = opts.MemoryMB
+	}
+	sb.LastActivityAt = now
+	sb.UpdatedAt = now
+	rt.warmupUntil = now.Add(d.cfg.Lifecycle.IdleDetection.Warmup.D())
+	if err := d.persistLocked(ctx, rt, sb); err != nil {
+		return types.Sandbox{}, err
+	}
+	d.event(ctx, sb.ID, "resize", fmt.Sprintf("cpu=%d memory_mb=%d", sb.VCPUs, sb.MemoryMB))
+	return *sb, nil
+}
+
 func (d *Daemon) Delete(ctx context.Context, ref string) error {
 	rt, err := d.runtimeFor(ctx, ref)
 	if err != nil {

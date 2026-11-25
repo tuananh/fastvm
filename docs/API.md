@@ -66,6 +66,7 @@ Same paths as the unix API, for example:
 GET  /v1/version
 GET  /v1/sandboxes
 POST /v1/sandboxes
+PATCH /v1/sandboxes/{ref}/resources
 POST /v1/sandboxes/{ref}/exec
 GET  /v1/events
 GET  /v1/kernels

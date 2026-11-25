@@ -20,6 +20,8 @@ import (
 
 type fakeRT struct {
 	created manager.CreateOptions
+	resize  manager.ResizeOptions
+	resized string
 	sb      types.Sandbox
 	err     error
 	exec    agent.Response
@@ -53,6 +55,11 @@ func (f *fakeRT) RemoveSnapshot(context.Context, string) error { return f.err }
 func (f *fakeRT) Get(context.Context, string) (types.Sandbox, error) {
 	return f.sb, f.err
 }
+func (f *fakeRT) Resize(_ context.Context, ref string, opts manager.ResizeOptions) (types.Sandbox, error) {
+	f.resized, f.resize = ref, opts
+	return f.sb, f.err
+}
+
 func (f *fakeRT) Stats(context.Context, string) (types.SandboxStats, error) {
 	return f.stats, f.err
 }

@@ -425,6 +425,7 @@ exec <sandbox> -- <cmd...>                  run a command in the guest (auto-wak
 exec -it <sandbox> -- <cmd...>              same, but with an interactive PTY
 shell <sandbox> [-- <cmd...>]               shorthand for exec -it <sandbox> -- /bin/sh
 run -f <file.fvmfile>                       create+boot from declarative config
+modify <sandbox> [--cpu N] [--memory MB]    resize live CPU/memory within boot ceilings
 pause <sandbox> [--deep]                    pause; --deep also offloads guest RAM to disk
 resume <sandbox>                            resume a paused/dormant sandbox
 rm <sandbox>                                delete sandbox + volume + memory image

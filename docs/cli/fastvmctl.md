@@ -41,6 +41,7 @@ Ambiguous prefixes fail with an error listing the matching sandboxes.
 | [`get`](fastvmctl_get.md) | Show one sandbox as JSON |
 | [`image`](fastvmctl_image.md) | Manage base images |
 | [`kernel`](fastvmctl_kernel.md) | List, download, and verify guest kernels |
+| [`modify`](fastvmctl_modify.md) | Resize live CPU/memory |
 | [`pause`](fastvmctl_pause.md) | Pause or offload a sandbox |
 | [`ps`](fastvmctl_ps.md) | List sandboxes |
 | [`resume`](fastvmctl_resume.md) | Boot or wake a sandbox |

@@ -142,14 +142,16 @@ func (f *fakeNet) WakeEvents() <-chan network.WakeEvent { return f.wakeCh }
 func (f *fakeNet) Close() error                         { return nil }
 
 type fakeVM struct {
-	mu      sync.Mutex
-	paused  bool
-	resumed int
-	stopped bool
-	snapDir string
-	stats   types.VMStats
-	stopErr error
-	snapErr error
+	mu        sync.Mutex
+	resizeCfg vmm.ResizeConfig
+	resized   bool
+	paused    bool
+	resumed   int
+	stopped   bool
+	snapDir   string
+	stats     types.VMStats
+	stopErr   error
+	snapErr   error
 }
 
 func (v *fakeVM) Pause(context.Context) error {
@@ -181,6 +183,14 @@ func (v *fakeVM) Stop(context.Context) error {
 	return v.stopErr
 }
 func (v *fakeVM) Wait(context.Context) error { return nil }
+func (v *fakeVM) Resize(_ context.Context, cfg vmm.ResizeConfig) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.resizeCfg = cfg
+	v.resized = true
+	return nil
+}
+
 func (v *fakeVM) Stats(context.Context) (vmm.Stats, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -543,6 +553,36 @@ func TestCreateUsesInstalledKernel(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "release-1") {
 		t.Fatalf("missing kernel error = %v", err)
+	}
+}
+
+func TestResizeResources(t *testing.T) {
+	h := newHarness(t)
+	sb, err := h.d.Create(context.Background(), manager.CreateOptions{
+		Name: "web", Image: "img:test", VCPUs: 1, MaxVCPUs: 4, MemoryMB: 128, MaxMemoryMB: 512,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := h.d.Resize(context.Background(), sb.ID, manager.ResizeOptions{VCPUs: 3, MemoryMB: 256})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.VCPUs != 3 || got.MemoryMB != 256 {
+		t.Fatalf("resized = %d/%d", got.VCPUs, got.MemoryMB)
+	}
+	h.drv.mu.Lock()
+	vm := h.drv.vms[len(h.drv.vms)-1]
+	h.drv.mu.Unlock()
+	vm.mu.Lock()
+	cfg := vm.resizeCfg
+	resized := vm.resized
+	vm.mu.Unlock()
+	if !resized || cfg.VCPUs != 3 || cfg.MemoryMB != 256 {
+		t.Fatalf("vmm resize = %+v resized=%v", cfg, resized)
+	}
+	if _, err := h.d.Resize(context.Background(), sb.ID, manager.ResizeOptions{VCPUs: 5}); !errors.Is(err, manager.ErrInvalid) {
+		t.Fatalf("over-max resize error = %v", err)
 	}
 }
 

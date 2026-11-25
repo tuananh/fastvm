@@ -85,6 +85,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/sandboxes", s.handleCreate)
 	s.mux.HandleFunc("GET /v1/sandboxes/{ref}", s.handleGet)
 	s.mux.HandleFunc("GET /v1/sandboxes/{ref}/stats", s.handleStats)
+	s.mux.HandleFunc("PATCH /v1/sandboxes/{ref}/resources", s.handleResize)
 	s.mux.HandleFunc("PUT /v1/sandboxes/{ref}/file", s.handleCopyTo)
 	s.mux.HandleFunc("GET /v1/sandboxes/{ref}/file", s.handleCopyFrom)
 	s.mux.HandleFunc("GET /v1/sandboxes/{ref}/console", s.handleConsole)
@@ -425,6 +426,25 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, sb)
+}
+
+func (s *Server) handleResize(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		VCPUs    int `json:"vcpus"`
+		MemoryMB int `json:"memory_mb"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorEnvelope{Error: err.Error()})
+		return
+	}
+	sb, err := s.rt.Resize(r.Context(), r.PathValue("ref"), manager.ResizeOptions{
+		VCPUs: req.VCPUs, MemoryMB: req.MemoryMB,
+	})
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sb)
 }
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {

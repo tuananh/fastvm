@@ -54,6 +54,7 @@ snapshots, images, volumes, and guest kernels.
 > fastvmctl ps
 > fastvmctl pause app --deep
 > fastvmctl resume app
+> fastvmctl modify app --cpu 2 --memory 256
 > fastvmctl rm app app2
 > ```
 >

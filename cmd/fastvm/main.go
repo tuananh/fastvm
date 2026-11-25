@@ -67,6 +67,7 @@ Environment:
 		newListCmd(),
 		newGetCmd(),
 		newCpCmd(),
+		newModifyCmd(),
 		newLogsCmd(),
 		newExecCmd(),
 		newShellCmd(),

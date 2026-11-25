@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"fastvm/internal/vmm"
 )
 
 // apiClient talks to Cloud Hypervisor's REST API over its Unix socket.
@@ -106,6 +108,21 @@ func (c *apiClient) counters(ctx context.Context) (map[string]deviceCounters, er
 		return nil, err
 	}
 	return out, nil
+}
+
+// resize changes live vCPU, RAM, and balloon targets (PUT /vm.resize).
+func (c *apiClient) resize(ctx context.Context, cfg vmm.ResizeConfig) error {
+	body := make(map[string]any)
+	if cfg.VCPUs > 0 {
+		body["desired_vcpus"] = cfg.VCPUs
+	}
+	if cfg.MemoryMB > 0 {
+		body["desired_ram"] = uint64(cfg.MemoryMB) << 20
+	}
+	if cfg.ResizeBalloon {
+		body["desired_balloon"] = uint64(cfg.BalloonMB) << 20
+	}
+	return c.do(ctx, http.MethodPut, "vm.resize", body, nil)
 }
 
 // snapshot writes a paused VM snapshot into dir (PUT /vm.snapshot).
