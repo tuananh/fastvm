@@ -40,8 +40,10 @@ With no command, it leaves the sandbox running and prints ID/state/name.
 | `--allow-host HOST` | Restrict egress to host; implies `--net` |
 | `--publish HOST:GUEST[/tcp\|udp]` | Publish a port |
 | `--auto-publish` | Discover guest TCP listeners ≥1024 and map 1:1 to `127.0.0.1` |
-| `--vcpus N` | vCPUs |
-| `--memory MB` | Memory in MiB |
+| `--cpu N` | Boot vCPUs |
+| `--max-cpu M` | vCPU hotplug ceiling (default: same as `--cpu`) |
+| `--memory MB` | Boot RAM in MiB |
+| `--max-memory MB` | Memory hotplug ceiling (default: same as `--memory`) |
 | `--env K=V` | Workload environment |
 | `-v, --volume SPEC` | Host volume `host[:guest][:ro]` or data volume `size=8GiB,mount=/data` |
 | `-w, --workdir DIR` | Guest working directory |
@@ -50,6 +52,11 @@ With no command, it leaves the sandbox running and prints ID/state/name.
 
 With `-f`, explicitly passed flags override fvmfile values. `--env` merges by
 key and `--volume` overrides a matching guest path.
+
+`--max-cpu` and `--max-memory` configure Cloud Hypervisor hotplug ceilings. They
+default to the boot values. The ceiling is recorded and configured at boot, but
+fastvm does not auto-grow resources yet. The virtio-balloon device is always
+enabled with a zero initial target.
 
 ## EXAMPLES
 
@@ -61,6 +68,7 @@ fastvmctl run --net -it --image alpine -- /bin/sh
 fastvmctl run -f examples/coding-agents/codex.fvmfile
 fastvmctl run --image alpine --name agent --no-start
 fastvmctl run --image alpine --kernel ch-release-v7.2.8-20261009 -- uname -a
+fastvmctl run --image alpine --cpu 1 --max-cpu 4 --memory 128 --max-memory 1024
 fastvmctl run --from-snapshot original-vm-20261119-182000 --name copy-1
 ```
 

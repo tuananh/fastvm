@@ -197,6 +197,7 @@ export function VmDetailDrawer({
   const memoryLimitBytes = sandbox.memory_mb * 1024 * 1024;
   const guestMemoryUsed = statsData?.guest_memory_used_bytes;
   const guestMemoryTotal = statsData?.guest_memory_total_bytes;
+  const guestMemoryBallooned = statsData?.guest_memory_ballooned_bytes;
   const hasGuestMemory = guestMemoryUsed !== undefined && guestMemoryUsed > 0;
   const memoryPercent =
     statsData === undefined
@@ -266,6 +267,9 @@ export function VmDetailDrawer({
             { label: "Uptime", value: formatDuration(statsData.uptime_seconds) },
             { label: "CPU", value: formatPercent(statsData.cpu_percent) },
             { label: "Host RSS", value: formatBytes(statsData.memory_rss_bytes) },
+            ...(guestMemoryBallooned !== undefined && guestMemoryBallooned > 0
+              ? [{ label: "Ballooned", value: formatBytes(guestMemoryBallooned) }]
+              : []),
             { label: "Block read", value: formatBytes(statsData.block_read_bytes) },
             { label: "Block write", value: formatBytes(statsData.block_write_bytes) },
             { label: "Network RX", value: formatBytes(statsData.rx_bytes) },
@@ -384,7 +388,14 @@ export function VmDetailDrawer({
             </InfoRow>
             <InfoRow label="Resources">
               <span>
-                {sandbox.vcpus} vCPU{sandbox.vcpus === 1 ? "" : "s"} · {sandbox.memory_mb} MB memory
+                {sandbox.vcpus} vCPU{sandbox.vcpus === 1 ? "" : "s"}
+                {sandbox.max_vcpus !== undefined && sandbox.max_vcpus > sandbox.vcpus
+                  ? ` (max ${sandbox.max_vcpus})`
+                  : ""}{" "}
+                · {sandbox.memory_mb} MB memory
+                {sandbox.max_memory_mb !== undefined && sandbox.max_memory_mb > sandbox.memory_mb
+                  ? ` (max ${sandbox.max_memory_mb} MB)`
+                  : ""}
               </span>
             </InfoRow>
             <InfoRow label="Auto sleep">

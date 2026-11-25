@@ -14,7 +14,9 @@ type BootConfig struct {
 	DiskPath    string   // raw writable volume
 	DataDisks   []string // extra raw writable volumes (vdb, vdc, ...)
 	VCPUs       int
+	MaxVCPUs    int
 	MemoryMB    int
+	MaxMemoryMB int
 	TAPName     string // empty = no NIC
 	MAC         string
 	GuestCID    uint32

@@ -546,6 +546,28 @@ func TestCreateUsesInstalledKernel(t *testing.T) {
 	}
 }
 
+func TestCreateMaxResources(t *testing.T) {
+	h := newHarness(t)
+	sb, err := h.d.Create(context.Background(), manager.CreateOptions{
+		Name: "web", Image: "img:test", VCPUs: 1, MaxVCPUs: 4, MemoryMB: 128, MaxMemoryMB: 1024,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sb.MaxVCPUs != 4 || sb.MaxMemoryMB != 1024 {
+		t.Fatalf("sandbox max = %d/%d", sb.MaxVCPUs, sb.MaxMemoryMB)
+	}
+	boot, ok := h.drv.lastBoot()
+	if !ok || boot.MaxVCPUs != 4 || boot.MaxMemoryMB != 1024 {
+		t.Fatalf("boot max = %+v ok=%v", boot, ok)
+	}
+	if _, err := h.d.Create(context.Background(), manager.CreateOptions{
+		Name: "bad", Image: "img:test", VCPUs: 2, MaxVCPUs: 1,
+	}); !errors.Is(err, manager.ErrInvalid) {
+		t.Fatalf("invalid max error = %v", err)
+	}
+}
+
 func TestCreateWithoutKernelFailsFast(t *testing.T) {
 	h := newHarness(t)
 	h.d.cfg.KernelPath = filepath.Join(t.TempDir(), "missing")
@@ -1452,6 +1474,9 @@ func TestPrometheusMetrics(t *testing.T) {
 		`fastvm_sandbox_info{sandbox_id="` + sb.ID + `"`,
 		`fastvm_sandbox_cpu_percent{sandbox_id="` + sb.ID + `"}`,
 		`fastvm_sandbox_memory_rss_bytes{sandbox_id="` + sb.ID + `"}`,
+		`fastvm_sandbox_guest_memory_used_bytes{sandbox_id="` + sb.ID + `"}`,
+		`fastvm_sandbox_guest_memory_total_bytes{sandbox_id="` + sb.ID + `"}`,
+		`fastvm_sandbox_guest_memory_ballooned_bytes{sandbox_id="` + sb.ID + `"}`,
 		`fastvm_sandbox_network_rx_bytes_total{sandbox_id="` + sb.ID + `"}`,
 		`fastvm_sandbox_wakes_total{sandbox_id="` + sb.ID + `"} 1`,
 		`fastvm_sandbox_sleeps_total{sandbox_id="` + sb.ID + `"} 1`,

@@ -44,7 +44,9 @@ interface FormErrors {
   image?: string;
   name?: string;
   vcpus?: string;
+  max_vcpus?: string;
   memory_mb?: string;
+  max_memory_mb?: string;
 }
 
 const DEFAULT_VCPUS = "1";
@@ -108,7 +110,9 @@ export function CreateVmModal({
   const [kernel, setKernel] = useState("");
   const [name, setName] = useState("");
   const [vcpus, setVcpus] = useState(DEFAULT_VCPUS);
+  const [maxVcpus, setMaxVcpus] = useState("");
   const [memoryMb, setMemoryMb] = useState(DEFAULT_MEMORY);
+  const [maxMemoryMb, setMaxMemoryMb] = useState("");
   const [noAutoSleep, setNoAutoSleep] = useState(false);
   const [volumes, setVolumes] = useState<VolumeRow[]>([]);
   const [dataVolumes, setDataVolumes] = useState<DataVolumeRow[]>([]);
@@ -130,7 +134,9 @@ export function CreateVmModal({
     setKernel("");
     setName("");
     setVcpus(DEFAULT_VCPUS);
+    setMaxVcpus("");
     setMemoryMb(DEFAULT_MEMORY);
+    setMaxMemoryMb("");
     setNoAutoSleep(false);
     setVolumes([]);
     setDataVolumes([]);
@@ -223,11 +229,23 @@ export function CreateVmModal({
     }
     const vcpuCount = Number(vcpus);
     if (vcpus.trim() === "" || !Number.isInteger(vcpuCount) || vcpuCount < 1 || vcpuCount > 8) {
-      nextErrors.vcpus = "vCPUs must be a whole number between 1 and 8.";
+      nextErrors.vcpus = "CPU must be a whole number between 1 and 8.";
     }
     const memory = Number(memoryMb);
     if (memoryMb.trim() === "" || !Number.isInteger(memory) || memory < 64 || memory > 4096) {
       nextErrors.memory_mb = "Memory must be a whole number between 64 and 4096 MB.";
+    }
+    if (maxVcpus.trim() !== "") {
+      const maximum = Number(maxVcpus);
+      if (!Number.isInteger(maximum) || maximum < vcpuCount || maximum > 64) {
+        nextErrors.max_vcpus = "Max CPU must be a whole number >= CPU and <= 64.";
+      }
+    }
+    if (maxMemoryMb.trim() !== "") {
+      const maximum = Number(maxMemoryMb);
+      if (!Number.isInteger(maximum) || maximum < memory || maximum > 65536) {
+        nextErrors.max_memory_mb = "Max memory must be a whole number >= memory and <= 65536 MB.";
+      }
     }
 
     const nextVolumeErrors: Record<number, VolumeErrors> = {};
@@ -274,6 +292,12 @@ export function CreateVmModal({
       memory_mb: Number(memoryMb),
       no_auto_sleep: noAutoSleep,
     };
+    if (maxVcpus.trim() !== "") {
+      input.max_vcpus = Number(maxVcpus);
+    }
+    if (maxMemoryMb.trim() !== "") {
+      input.max_memory_mb = Number(maxMemoryMb);
+    }
     if (kernel !== "") {
       input.kernel = kernel;
     }
@@ -449,7 +473,7 @@ export function CreateVmModal({
         </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="vCPUs" htmlFor="create-vcpus" required error={errors.vcpus}>
+          <Field label="CPU" htmlFor="create-vcpus" required error={errors.vcpus}>
             <Input
               id="create-vcpus"
               type="number"
@@ -476,6 +500,48 @@ export function CreateVmModal({
               onChange={(event) => {
                 setMemoryMb(event.target.value);
                 setErrors((current) => ({ ...current, memory_mb: undefined }));
+              }}
+            />
+          </Field>
+          <Field
+            label="Max CPU (optional)"
+            htmlFor="create-max-vcpus"
+            error={errors.max_vcpus}
+            hint={<span className="form-hint">Hotplug ceiling; defaults to CPU.</span>}
+          >
+            <Input
+              id="create-max-vcpus"
+              type="number"
+              min={1}
+              max={64}
+              step={1}
+              placeholder="same as CPU"
+              value={maxVcpus}
+              disabled={isCreating}
+              onChange={(event) => {
+                setMaxVcpus(event.target.value);
+                setErrors((current) => ({ ...current, max_vcpus: undefined }));
+              }}
+            />
+          </Field>
+          <Field
+            label="Max memory (MB, optional)"
+            htmlFor="create-max-memory"
+            error={errors.max_memory_mb}
+            hint={<span className="form-hint">Hotplug ceiling; defaults to memory.</span>}
+          >
+            <Input
+              id="create-max-memory"
+              type="number"
+              min={64}
+              max={65536}
+              step={64}
+              placeholder="same as memory"
+              value={maxMemoryMb}
+              disabled={isCreating}
+              onChange={(event) => {
+                setMaxMemoryMb(event.target.value);
+                setErrors((current) => ({ ...current, max_memory_mb: undefined }));
               }}
             />
           </Field>

@@ -37,6 +37,9 @@ All are labeled with `sandbox_id`.
 | `fastvm_sandbox_info` | gauge | Identity/config; labels include name, state, memory_mb, vcpus |
 | `fastvm_sandbox_cpu_percent` | gauge | Cached CPU utilization |
 | `fastvm_sandbox_memory_rss_bytes` | gauge | VMM process RSS |
+| `fastvm_sandbox_guest_memory_used_bytes` | gauge | Guest-used memory (`free` semantics) |
+| `fastvm_sandbox_guest_memory_total_bytes` | gauge | Guest-visible total memory |
+| `fastvm_sandbox_guest_memory_ballooned_bytes` | gauge | Memory inflated into the virtio balloon |
 | `fastvm_sandbox_network_rx_bytes_total` | counter | Guest receive bytes |
 | `fastvm_sandbox_network_tx_bytes_total` | counter | Guest transmit bytes |
 | `fastvm_sandbox_wakes_total` | counter | Wake count |
@@ -49,6 +52,9 @@ Example:
 fastvm_sandbox_info{sandbox_id="abc123",sandbox_name="dev",state="Running",memory_mb="1024",vcpus="2"} 1
 fastvm_sandbox_cpu_percent{sandbox_id="abc123"} 0.4
 fastvm_sandbox_memory_rss_bytes{sandbox_id="abc123"} 548000000
+fastvm_sandbox_guest_memory_used_bytes{sandbox_id="abc123"} 24117248
+fastvm_sandbox_guest_memory_total_bytes{sandbox_id="abc123"} 100909056
+fastvm_sandbox_guest_memory_ballooned_bytes{sandbox_id="abc123"} 0
 fastvm_sandbox_wakes_total{sandbox_id="abc123"} 2
 fastvm_sandbox_sleeps_total{sandbox_id="abc123"} 1
 fastvm_sandbox_execs_total{sandbox_id="abc123"} 4

@@ -156,6 +156,8 @@ fastvmctl run --image alpine -- uname -a
 - **Snapshots.** Save RAM/CPU/disk and restore independent copies.
 - **Volumes and ports.** virtio-fs host mounts, writable block data volumes, and
   published ports.
+- **Elastic sizing.** Boot-time CPU/memory plus hotplug ceilings and a virtio
+  balloon enabled by default.
 - **Declarative configs and console.** Run `.fvmfile` sandboxes (e.g. coding
   agents), and use the OIDC web console.
 

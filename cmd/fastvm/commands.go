@@ -185,7 +185,7 @@ func (o *networkOptions) validate(cmdName string) error {
 
 func newRunCmd() *cobra.Command {
 	var image, name, file, fromSnapshot, entrypoint, workdir, kernelRef string
-	var vcpus, memory int
+	var vcpus, maxVCPUs, memory, maxMemory int
 	var publishes, envs, volumes []string
 	var userData string
 	var detach, noStart bool
@@ -219,8 +219,8 @@ reassigned.
 block data volume (size=8GiB,mount=/data). Data volumes are cloned from a blank
 ext4 template and disable automatic sleep and snapshots.
 
---kernel pins this sandbox to an installed kernel release from kernel ls. Without
-it the daemon's current kernel is used.`,
+--max-cpu/--max-memory set hotplug ceilings; they default to --cpu/--memory.
+Cloud Hypervisor exposes the balloon device by default.`,
 		Example: `  fastvmctl run --net --image alpine -- uname -a
   fastvmctl run --net -it --image alpine -- /bin/sh
   fastvmctl run -f examples/coding-agents/codex.fvmfile
@@ -230,6 +230,7 @@ it the daemon's current kernel is used.`,
   fastvmctl run --image alpine --name agent --no-start
   fastvmctl run --from-snapshot original-vm-20261119-182000 --name copy-1
   fastvmctl run --image alpine --kernel ch-release-v7.2.8-20261009 -- uname -a
+  fastvmctl run --image alpine --cpu 1 --max-cpu 4 --memory 128 --max-memory 1024
   fastvmctl run --name agent`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cobraCmd *cobra.Command, cmdArgs []string) error {
@@ -247,7 +248,7 @@ it the daemon's current kernel is used.`,
 				if file != "" || cobraCmd.Flags().Changed("image") {
 					return errors.New("--from-snapshot cannot be combined with --image or --file")
 				}
-				for _, flagName := range []string{"vcpus", "memory", "publish", "env", "volume", "net", "no-net", "allow-host", "auto-publish", "no-auto-sleep", "entrypoint", "workdir"} {
+				for _, flagName := range []string{"cpu", "max-cpu", "memory", "max-memory", "publish", "env", "volume", "net", "no-net", "allow-host", "auto-publish", "no-auto-sleep", "entrypoint", "workdir"} {
 					if cobraCmd.Flags().Changed(flagName) {
 						return fmt.Errorf("--%s does not apply with --from-snapshot", flagName)
 					}
@@ -297,7 +298,7 @@ it the daemon's current kernel is used.`,
 				if !changed("workdir") {
 					workdir = spec.Workdir
 				}
-				if !changed("vcpus") && spec.VCPUs > 0 {
+				if !changed("cpu") && spec.VCPUs > 0 {
 					vcpus = spec.VCPUs
 				}
 				if !changed("memory") && spec.MemoryMB > 0 {
@@ -411,9 +412,18 @@ it the daemon's current kernel is used.`,
 			if detach {
 				workload = runArgs
 			}
+			if maxVCPUs == 0 {
+				maxVCPUs = vcpus
+			}
+			if maxMemory == 0 {
+				maxMemory = memory
+			}
+			if maxVCPUs < vcpus || maxMemory < memory {
+				return errors.New("--max-cpu/--max-memory must be >= --cpu/--memory")
+			}
 			body := map[string]any{
 				"name": name, "image": image, "kernel": kernelRef, "workdir": workdir,
-				"vcpus": vcpus, "memory_mb": memory,
+				"vcpus": vcpus, "max_vcpus": maxVCPUs, "memory_mb": memory, "max_memory_mb": maxMemory,
 				"ports": ports, "volumes": vols, "data_volumes": dataVols, "cmd": workload, "env": env,
 				"no_auto_sleep": noAutoSleep, "start": !noStart,
 				"network_enabled": opts.enabled(), "allow_hosts": opts.allowHosts,
@@ -449,8 +459,10 @@ it the daemon's current kernel is used.`,
 	f.StringVarP(&workdir, "workdir", "w", "", "guest working directory")
 	f.StringVar(&image, "image", "", "OCI image or base disk tag/digest")
 	f.StringVar(&name, "name", "", "sandbox name or ID (boot it if no image/file is given)")
-	f.IntVar(&vcpus, "vcpus", 1, "vCPUs")
-	f.IntVar(&memory, "memory", 128, "memory MiB")
+	f.IntVar(&vcpus, "cpu", 1, "boot vCPUs")
+	f.IntVar(&maxVCPUs, "max-cpu", 0, "maximum vCPUs for hotplug (default: --cpu)")
+	f.IntVar(&memory, "memory", 128, "boot memory MiB")
+	f.IntVar(&maxMemory, "max-memory", 0, "maximum memory MiB for hotplug (default: --memory)")
 	f.StringArrayVar(&publishes, "publish", nil, "publish a port host:guest[/tcp|udp]")
 	f.StringArrayVar(&envs, "env", nil, "workload env K=V")
 	f.StringArrayVarP(&volumes, "volume", "v", nil, "mount a host directory (host[:guest][:ro]) or data volume (size=8GiB,mount=/data)")

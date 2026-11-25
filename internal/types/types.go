@@ -69,7 +69,9 @@ type Sandbox struct {
 	KernelPath     string        `json:"kernel_path,omitempty"` // resolved host path
 	VolumePath     string        `json:"volume_path"`
 	VCPUs          int           `json:"vcpus"`
+	MaxVCPUs       int           `json:"max_vcpus,omitempty"`
 	MemoryMB       int           `json:"memory_mb"`
+	MaxMemoryMB    int           `json:"max_memory_mb,omitempty"`
 	State          State         `json:"state"`
 	Workdir        string        `json:"workdir,omitempty"`
 	AutoPublish    bool          `json:"auto_publish,omitempty"`
@@ -161,15 +163,16 @@ type SandboxStats struct {
 	MemoryMB       int     `json:"memory_mb"`
 	MemoryRSSBytes uint64  `json:"memory_rss_bytes"`
 	// GuestMemoryUsedBytes is guest-internal memory usage from the agent.
-	GuestMemoryUsedBytes  uint64    `json:"guest_memory_used_bytes,omitempty"`
-	GuestMemoryTotalBytes uint64    `json:"guest_memory_total_bytes,omitempty"`
-	UptimeSeconds         int64     `json:"uptime_seconds"`
-	WakeCount             int       `json:"wake_count"`
-	BlockReadBytes        uint64    `json:"block_read_bytes"`
-	BlockWriteBytes       uint64    `json:"block_write_bytes"`
-	RxBytes               uint64    `json:"rx_bytes"`
-	TxBytes               uint64    `json:"tx_bytes"`
-	CapturedAt            time.Time `json:"captured_at"`
+	GuestMemoryUsedBytes      uint64    `json:"guest_memory_used_bytes,omitempty"`
+	GuestMemoryTotalBytes     uint64    `json:"guest_memory_total_bytes,omitempty"`
+	GuestMemoryBalloonedBytes uint64    `json:"guest_memory_ballooned_bytes,omitempty"`
+	UptimeSeconds             int64     `json:"uptime_seconds"`
+	WakeCount                 int       `json:"wake_count"`
+	BlockReadBytes            uint64    `json:"block_read_bytes"`
+	BlockWriteBytes           uint64    `json:"block_write_bytes"`
+	RxBytes                   uint64    `json:"rx_bytes"`
+	TxBytes                   uint64    `json:"tx_bytes"`
+	CapturedAt                time.Time `json:"captured_at"`
 }
 
 // Now is a test seam for time.

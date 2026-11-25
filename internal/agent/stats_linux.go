@@ -65,5 +65,6 @@ func parseMeminfo(data string) (GuestStats, error) {
 		MemoryTotalBytes:     total,
 		MemoryAvailableBytes: available,
 		MemoryUsedBytes:      used,
+		MemoryBalloonedBytes: values["Balloon"],
 	}, nil
 }

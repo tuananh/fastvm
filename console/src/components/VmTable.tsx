@@ -298,7 +298,7 @@ export function VmTable({
                   Memory
                 </th>
                 <th scope="col" className={cn(TH_CLASS, "w-[84px] whitespace-nowrap text-right")}>
-                  vCPUs
+                  CPUs
                 </th>
                 <th scope="col" className={cn(TH_CLASS, "w-[132px] whitespace-nowrap")}>
                   IP

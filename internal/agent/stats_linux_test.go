@@ -11,6 +11,7 @@ MemAvailable:     451888 kB
 Buffers:            1024 kB
 Cached:             6000 kB
 SReclaimable:       1288 kB
+Balloon:           16384 kB
 `
 	stats, err := parseMeminfo(data)
 	if err != nil {
@@ -24,5 +25,8 @@ SReclaimable:       1288 kB
 	}
 	if stats.MemoryUsedBytes != wantUsed {
 		t.Errorf("used = %d, want %d", stats.MemoryUsedBytes, wantUsed)
+	}
+	if stats.MemoryBalloonedBytes != 16384*k {
+		t.Errorf("ballooned = %d, want %d", stats.MemoryBalloonedBytes, 16384*k)
 	}
 }

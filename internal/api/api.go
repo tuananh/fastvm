@@ -389,7 +389,9 @@ type createReq struct {
 	Image          string              `json:"image"`
 	Kernel         string              `json:"kernel"`
 	VCPUs          int                 `json:"vcpus"`
+	MaxVCPUs       int                 `json:"max_vcpus"`
 	MemoryMB       int                 `json:"memory_mb"`
+	MaxMemoryMB    int                 `json:"max_memory_mb"`
 	Ports          []types.PortMapping `json:"ports"`
 	Cmd            []string            `json:"cmd"`
 	Env            map[string]string   `json:"env"`
@@ -412,7 +414,8 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sb, err := s.rt.Create(r.Context(), manager.CreateOptions{
-		Name: req.Name, Image: req.Image, Kernel: req.Kernel, VCPUs: req.VCPUs, MemoryMB: req.MemoryMB,
+		Name: req.Name, Image: req.Image, Kernel: req.Kernel,
+		VCPUs: req.VCPUs, MaxVCPUs: req.MaxVCPUs, MemoryMB: req.MemoryMB, MaxMemoryMB: req.MaxMemoryMB,
 		Ports: req.Ports, Volumes: req.Volumes, DataVolumes: req.DataVolumes, Cmd: req.Cmd, Env: req.Env, Workdir: req.Workdir, AutoPublish: req.AutoPublish, NoAutoSleep: req.NoAutoSleep,
 		Start: req.Start, NetworkEnabled: req.NetworkEnabled, AllowHosts: req.AllowHosts,
 		FromSnapshot: req.FromSnapshot, UserData: req.UserData,

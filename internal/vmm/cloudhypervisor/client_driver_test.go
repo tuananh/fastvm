@@ -21,7 +21,9 @@ func TestBootArgs(t *testing.T) {
 		DiskPath:    "/volumes/sb-1.img",
 		DataDisks:   []string{"/volumes/sb-1-data-0.img", "/volumes/sb-1-data-1.img"},
 		VCPUs:       4,
+		MaxVCPUs:    8,
 		MemoryMB:    1024,
+		MaxMemoryMB: 2048,
 		TAPName:     "tap-1",
 		MAC:         "02:00:00:00:00:01",
 		GuestCID:    7,
@@ -40,8 +42,9 @@ func TestBootArgs(t *testing.T) {
 	for _, want := range []string{
 		"--kernel\n/kernels/vmlinux",
 		"--cmdline\nconsole=ttyS0 root=/dev/vda rw init=/init",
-		"--cpus\nboot=4",
-		"--memory\nsize=1024M,shared=on",
+		"--cpus\nboot=4,max=8",
+		"--memory\nsize=1024M,hotplug_size=1024M,hotplug_method=virtio-mem,shared=on",
+		"--balloon\nsize=0,deflate_on_oom=on",
 		"--disk\npath=/volumes/sb-1.img,image_type=raw",
 		"--disk\npath=/volumes/sb-1-data-0.img,image_type=raw",
 		"--disk\npath=/volumes/sb-1-data-1.img,image_type=raw",
@@ -78,11 +81,14 @@ func TestBootArgsDefaultsAndNoVolumes(t *testing.T) {
 }
 
 func TestMemoryParam(t *testing.T) {
-	if got := memoryParam(512, false); got != "size=512M" {
+	if got := memoryParam(512, 512, false); got != "size=512M" {
 		t.Fatalf("memoryParam without volumes = %q", got)
 	}
-	if got := memoryParam(512, true); got != "size=512M,shared=on" {
+	if got := memoryParam(512, 512, true); got != "size=512M,shared=on" {
 		t.Fatalf("memoryParam with volumes = %q", got)
+	}
+	if got := memoryParam(128, 1024, false); got != "size=128M,hotplug_size=896M,hotplug_method=virtio-mem" {
+		t.Fatalf("memoryParam with hotplug = %q", got)
 	}
 }
 

@@ -295,3 +295,23 @@ describe("CreateVmModal kernel", () => {
     expect(input.kernel).toBeUndefined();
   });
 });
+
+describe("CreateVmModal max resources", () => {
+  it("sends hotplug ceilings when provided", async () => {
+    renderModal();
+    chooseImage();
+    fireEvent.change(screen.getByLabelText(/Max CPU/), { target: { value: "4" } });
+    fireEvent.change(screen.getByLabelText(/Max memory/), { target: { value: "1024" } });
+    submit();
+
+    await waitFor(() => {
+      expect(queryMocks.create.mutateAsync).toHaveBeenCalledTimes(1);
+    });
+    const input = queryMocks.create.mutateAsync.mock.calls[0][0] as {
+      max_vcpus?: number;
+      max_memory_mb?: number;
+    };
+    expect(input.max_vcpus).toBe(4);
+    expect(input.max_memory_mb).toBe(1024);
+  });
+});

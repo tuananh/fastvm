@@ -30,12 +30,21 @@ type SnapshotMeta struct {
 	Kernel         string    `json:"kernel,omitempty"`
 	KernelPath     string    `json:"kernel_path,omitempty"`
 	VCPUs          int       `json:"vcpus"`
+	MaxVCPUs       int       `json:"max_vcpus,omitempty"`
 	MemoryMB       int       `json:"memory_mb"`
+	MaxMemoryMB    int       `json:"max_memory_mb,omitempty"`
 	Workdir        string    `json:"workdir,omitempty"`
 	NetworkEnabled bool      `json:"network_enabled"`
 	AllowHosts     []string  `json:"allow_hosts,omitempty"`
 	VsockCID       uint32    `json:"vsock_cid"`
 	CreatedAt      time.Time `json:"created_at"`
+}
+
+func defaultMax(maximum, base int) int {
+	if maximum < base {
+		return base
+	}
+	return maximum
 }
 
 var hostnameArgRE = regexp.MustCompile(`fastvm\.hostname=[^ ]+`)
@@ -202,7 +211,8 @@ func (d *Daemon) snapshotLocked(ctx context.Context, rt *runtime, outDir string)
 	meta := SnapshotMeta{
 		Version: snapshotVersion, ImageDigest: sb.BaseDisk,
 		Kernel: sb.Kernel, KernelPath: sb.KernelPath,
-		VCPUs: sb.VCPUs, MemoryMB: sb.MemoryMB, Workdir: sb.Workdir,
+		VCPUs: sb.VCPUs, MaxVCPUs: sb.MaxVCPUs, MemoryMB: sb.MemoryMB, MaxMemoryMB: sb.MaxMemoryMB,
+		Workdir:        sb.Workdir,
 		NetworkEnabled: sb.NetworkEnabled, AllowHosts: sb.AllowHosts,
 		VsockCID: guestCID(sb.IP), CreatedAt: d.now(),
 	}
@@ -277,8 +287,10 @@ func (d *Daemon) createFromSnapshot(ctx context.Context, opts manager.CreateOpti
 	}
 	sb := types.Sandbox{
 		ID: id, Name: name, BaseDisk: base.Digest, Kernel: meta.Kernel, KernelPath: kernelPath,
-		VCPUs: meta.VCPUs, MemoryMB: meta.MemoryMB, Workdir: meta.Workdir,
-		State: types.StateStarting, NetworkEnabled: meta.NetworkEnabled,
+		VCPUs: meta.VCPUs, MaxVCPUs: defaultMax(meta.MaxVCPUs, meta.VCPUs),
+		MemoryMB: meta.MemoryMB, MaxMemoryMB: defaultMax(meta.MaxMemoryMB, meta.MemoryMB),
+		Workdir: meta.Workdir,
+		State:   types.StateStarting, NetworkEnabled: meta.NetworkEnabled,
 		AllowHosts:  meta.AllowHosts,
 		VMMAPISock:  filepath.Join(dir, "vmm-api.sock"),
 		VsockUDPath: filepath.Join(dir, "vsock.sock"),

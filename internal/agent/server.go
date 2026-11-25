@@ -238,6 +238,7 @@ func (s *Server) dispatch(ctx context.Context, c *conn, req Request) {
 			resp.MemoryTotalBytes = stats.MemoryTotalBytes
 			resp.MemoryAvailableBytes = stats.MemoryAvailableBytes
 			resp.MemoryUsedBytes = stats.MemoryUsedBytes
+			resp.MemoryBalloonedBytes = stats.MemoryBalloonedBytes
 		}
 	case OpFileStat:
 		size, mode, err := fileStat(req.Path)

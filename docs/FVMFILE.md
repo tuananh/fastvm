@@ -70,7 +70,7 @@ no_auto_sleep: true
 
 CLI flags override the corresponding `.fvmfile` fields. `--name` overrides the
 file name. `--env` merges per key (CLI wins), and `--volume` wins for a matching
-guest path. Other creation flags (`--image`, `--vcpus`, `--memory`, `--publish`,
+guest path. Other creation flags (`--image`, `--cpu`, `--memory`, `--publish`,
 `--net`/`--no-net`, `--allow-host`, `--no-auto-sleep`) replace the file value
 only when explicitly passed.
 

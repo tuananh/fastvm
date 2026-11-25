@@ -15,7 +15,9 @@ type CreateOptions struct {
 	Image       string // base disk tag or digest
 	Kernel      string // optional installed kernel release for this sandbox
 	VCPUs       int
+	MaxVCPUs    int
 	MemoryMB    int
+	MaxMemoryMB int
 	Ports       []types.PortMapping
 	Volumes     []types.Volume
 	DataVolumes []types.DataVolume // per-sandbox writable block volumes

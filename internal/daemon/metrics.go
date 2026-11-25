@@ -85,6 +85,9 @@ func (d *Daemon) PrometheusMetrics(ctx context.Context) ([]byte, error) {
 	}
 	writeHelpType(&b, "fastvm_sandbox_cpu_percent", "Cached sandbox CPU utilization percent.", "gauge")
 	writeHelpType(&b, "fastvm_sandbox_memory_rss_bytes", "VMM resident set size in bytes.", "gauge")
+	writeHelpType(&b, "fastvm_sandbox_guest_memory_used_bytes", "Guest-used memory in bytes (free semantics).", "gauge")
+	writeHelpType(&b, "fastvm_sandbox_guest_memory_total_bytes", "Guest-visible total memory in bytes.", "gauge")
+	writeHelpType(&b, "fastvm_sandbox_guest_memory_ballooned_bytes", "Memory currently inflated into the virtio balloon.", "gauge")
 	writeHelpType(&b, "fastvm_sandbox_network_rx_bytes_total", "Guest network receive bytes.", "counter")
 	writeHelpType(&b, "fastvm_sandbox_network_tx_bytes_total", "Guest network transmit bytes.", "counter")
 	writeHelpType(&b, "fastvm_sandbox_wakes_total", "Sandbox wake count.", "counter")
@@ -92,16 +95,20 @@ func (d *Daemon) PrometheusMetrics(ctx context.Context) ([]byte, error) {
 	writeHelpType(&b, "fastvm_sandbox_execs_total", "Guest exec attempt count.", "counter")
 	for _, sb := range sandboxes {
 		var cpuPct float64
-		var rss, rx, tx uint64
+		var rss, rx, tx, guestUsed, guestTotal, ballooned uint64
 		if rt := runtimes[sb.ID]; rt != nil {
 			rt.mu.Lock()
 			cpuPct = rt.cpuPct
 			rss, rx, tx = rt.memoryRSSBytes, rt.rxBytes, rt.txBytes
+			guestUsed, guestTotal, ballooned = rt.guestMemoryUsedBytes, rt.guestMemoryTotalBytes, rt.guestMemoryBalloonedBytes
 			rt.mu.Unlock()
 		}
 		labels := fmt.Sprintf("sandbox_id=%q", sb.ID)
 		fmt.Fprintf(&b, "fastvm_sandbox_cpu_percent{%s} %g\n", labels, cpuPct)
 		fmt.Fprintf(&b, "fastvm_sandbox_memory_rss_bytes{%s} %d\n", labels, rss)
+		fmt.Fprintf(&b, "fastvm_sandbox_guest_memory_used_bytes{%s} %d\n", labels, guestUsed)
+		fmt.Fprintf(&b, "fastvm_sandbox_guest_memory_total_bytes{%s} %d\n", labels, guestTotal)
+		fmt.Fprintf(&b, "fastvm_sandbox_guest_memory_ballooned_bytes{%s} %d\n", labels, ballooned)
 		fmt.Fprintf(&b, "fastvm_sandbox_network_rx_bytes_total{%s} %d\n", labels, rx)
 		fmt.Fprintf(&b, "fastvm_sandbox_network_tx_bytes_total{%s} %d\n", labels, tx)
 		fmt.Fprintf(&b, "fastvm_sandbox_wakes_total{%s} %d\n", labels, sb.WakeCount)

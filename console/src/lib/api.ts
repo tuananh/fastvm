@@ -256,7 +256,9 @@ export interface CreateSandboxInput {
   /** Installed kernel release; omitted uses the daemon current kernel. */
   kernel?: string;
   vcpus?: number;
+  max_vcpus?: number;
   memory_mb?: number;
+  max_memory_mb?: number;
   cmd?: string[];
   no_auto_sleep?: boolean;
   /** Host directories to mount into the guest with virtio-fs. */

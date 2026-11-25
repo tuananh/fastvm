@@ -174,15 +174,16 @@ type runtime struct {
 	lastTick  time.Time
 
 	// Latest sampler snapshot, served by Stats without touching /proc.
-	cpuPct                float64
-	blockReadBytes        uint64
-	blockWriteBytes       uint64
-	memoryRSSBytes        uint64
-	guestMemoryUsedBytes  uint64
-	guestMemoryTotalBytes uint64
-	rxBytes               uint64
-	txBytes               uint64
-	statsAt               time.Time
+	cpuPct                    float64
+	blockReadBytes            uint64
+	blockWriteBytes           uint64
+	memoryRSSBytes            uint64
+	guestMemoryUsedBytes      uint64
+	guestMemoryTotalBytes     uint64
+	guestMemoryBalloonedBytes uint64
+	rxBytes                   uint64
+	txBytes                   uint64
+	statsAt                   time.Time
 
 	execActive      int
 	workload        []string
@@ -278,6 +279,16 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 	if vcpus < 1 || mem < 64 {
 		return types.Sandbox{}, fmt.Errorf("%w: vcpus>=1 and memory_mb>=64 required", manager.ErrInvalid)
 	}
+	maxVCPUs, maxMem := opts.MaxVCPUs, opts.MaxMemoryMB
+	if maxVCPUs == 0 {
+		maxVCPUs = vcpus
+	}
+	if maxMem == 0 {
+		maxMem = mem
+	}
+	if maxVCPUs < vcpus || maxMem < mem {
+		return types.Sandbox{}, fmt.Errorf("%w: max_vcpus/max_memory_mb must be >= vcpus/memory_mb", manager.ErrInvalid)
+	}
 	if err := validateVolumes(d.cfg, opts.Volumes); err != nil {
 		return types.Sandbox{}, err
 	}
@@ -341,7 +352,7 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 	}
 	sb := types.Sandbox{
 		ID: id, Name: name, BaseDisk: base.Digest, Kernel: kernelRelease, KernelPath: kernelPath,
-		VCPUs: vcpus, MemoryMB: mem,
+		VCPUs: vcpus, MaxVCPUs: maxVCPUs, MemoryMB: mem, MaxMemoryMB: maxMem,
 		State: types.StateCreating, Workdir: opts.Workdir, AutoPublish: opts.AutoPublish,
 		NoAutoSleep: opts.NoAutoSleep || len(opts.DataVolumes) > 0,
 		Ports:       opts.Ports, Volumes: opts.Volumes, DataVolumes: opts.DataVolumes,
@@ -476,7 +487,9 @@ func (d *Daemon) bootLocked(ctx context.Context, rt *runtime) error {
 		DiskPath:    sb.VolumePath,
 		DataDisks:   dataDiskPaths(sb.DataVolumes),
 		VCPUs:       sb.VCPUs,
+		MaxVCPUs:    sb.MaxVCPUs,
 		MemoryMB:    sb.MemoryMB,
+		MaxMemoryMB: sb.MaxMemoryMB,
 		TAPName:     sb.TAPName,
 		MAC:         sb.MAC,
 		GuestCID:    guestCID(sb.IP),
@@ -665,6 +678,7 @@ func (d *Daemon) Stats(ctx context.Context, ref string) (types.SandboxStats, err
 	out.MemoryRSSBytes = rt.memoryRSSBytes
 	out.GuestMemoryUsedBytes = rt.guestMemoryUsedBytes
 	out.GuestMemoryTotalBytes = rt.guestMemoryTotalBytes
+	out.GuestMemoryBalloonedBytes = rt.guestMemoryBalloonedBytes
 	out.BlockReadBytes = rt.blockReadBytes
 	out.BlockWriteBytes = rt.blockWriteBytes
 	out.RxBytes = rt.rxBytes
@@ -1251,6 +1265,7 @@ func (d *Daemon) sampleLocked(rt *runtime, sb *types.Sandbox) {
 		if err == nil {
 			rt.guestMemoryUsedBytes = gs.MemoryUsedBytes
 			rt.guestMemoryTotalBytes = gs.MemoryTotalBytes
+			rt.guestMemoryBalloonedBytes = gs.MemoryBalloonedBytes
 		}
 	}
 	if st, err := d.net.Stats(context.Background(), sb.ID); err == nil {

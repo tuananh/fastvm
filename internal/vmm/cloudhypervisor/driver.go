@@ -193,8 +193,19 @@ func effectiveMemoryMB(n int) int {
 	return n
 }
 
-func memoryParam(memMB int, withVolumes bool) string {
+func cpusParam(boot, max int) string {
+	if max < boot {
+		max = boot
+	}
+	return fmt.Sprintf("boot=%d,max=%d", boot, max)
+}
+
+func memoryParam(memMB, maxMemMB int, withVolumes bool) string {
 	p := fmt.Sprintf("size=%dM", memMB)
+	if maxMemMB > memMB {
+		// A hotplug ceiling lets the guest grow up to max later.
+		p += fmt.Sprintf(",hotplug_size=%dM,hotplug_method=virtio-mem", maxMemMB-memMB)
+	}
 	if withVolumes {
 		// virtio-fs requires shared guest memory (vhost-user).
 		p += ",shared=on"
@@ -209,12 +220,23 @@ func bootArgs(cfg vmm.BootConfig, paths vmPaths, fsSocks []string) []string {
 	if cmdline == "" {
 		cmdline = defaultCmdline
 	}
+	bootVCPUs := effectiveVCPUs(cfg.VCPUs)
+	maxVCPUs := cfg.MaxVCPUs
+	if maxVCPUs < bootVCPUs {
+		maxVCPUs = bootVCPUs
+	}
+	bootMemory := effectiveMemoryMB(cfg.MemoryMB)
+	maxMemory := cfg.MaxMemoryMB
+	if maxMemory < bootMemory {
+		maxMemory = bootMemory
+	}
 	args := []string{
 		"--api-socket", paths.apiSock,
 		"--kernel", cfg.KernelPath,
 		"--cmdline", cmdline,
-		"--cpus", fmt.Sprintf("boot=%d", effectiveVCPUs(cfg.VCPUs)),
-		"--memory", memoryParam(effectiveMemoryMB(cfg.MemoryMB), len(cfg.Volumes) > 0),
+		"--cpus", cpusParam(bootVCPUs, maxVCPUs),
+		"--memory", memoryParam(bootMemory, maxMemory, len(cfg.Volumes) > 0),
+		"--balloon", "size=0,deflate_on_oom=on",
 		"--disk", fmt.Sprintf("path=%s,image_type=raw", cfg.DiskPath),
 		"--serial", "file=" + paths.serial,
 		"--console", "off",

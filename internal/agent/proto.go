@@ -92,6 +92,7 @@ type Response struct {
 	MemoryTotalBytes     uint64 `json:"memory_total_bytes,omitempty"`
 	MemoryAvailableBytes uint64 `json:"memory_available_bytes,omitempty"`
 	MemoryUsedBytes      uint64 `json:"memory_used_bytes,omitempty"`
+	MemoryBalloonedBytes uint64 `json:"memory_ballooned_bytes,omitempty"`
 }
 
 // GuestStats is a guest-internal memory snapshot.
@@ -99,6 +100,7 @@ type GuestStats struct {
 	MemoryTotalBytes     uint64
 	MemoryAvailableBytes uint64
 	MemoryUsedBytes      uint64
+	MemoryBalloonedBytes uint64
 }
 
 // Event is pushed guest -> host asynchronously.

@@ -74,7 +74,7 @@ resources:
 	root.SetArgs([]string{
 		"--socket", sock, "run", "-d", "-f", file,
 		"--image", "alpine",
-		"--vcpus", "4",
+		"--cpu", "4",
 		"--memory", "2048",
 		"--publish", "9090:90",
 		"--env", "FROM_FILE=flag",

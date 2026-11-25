@@ -33,7 +33,7 @@ modified, and multiple sandboxes can be restored from it.
 `run --from-snapshot` cannot be combined with:
 
 ```text
---image  --file  --vcpus  --memory  --publish  --env  --volume
+--image  --file  --cpu  --memory  --publish  --env  --volume
 --net  --allow-host  --auto-publish  --no-auto-sleep
 --entrypoint  --workdir  --no-start
 ```
