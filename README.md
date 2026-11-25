@@ -54,7 +54,6 @@ snapshots, images, volumes, and guest kernels.
 > fastvmctl ps
 > fastvmctl pause app --deep
 > fastvmctl resume app
-> fastvmctl modify app --cpu 2 --memory 256
 > fastvmctl rm app app2
 > ```
 >
@@ -63,6 +62,23 @@ snapshots, images, volumes, and guest kernels.
 > fastvmctl logs app
 > fastvmctl logs --source console app
 > fastvmctl logs -f app
+> ```
+
+#### <img height="14" src="https://octicons-col.vercel.app/arrow-both/A770EF">&nbsp;&nbsp;Resize a Sandbox
+
+> ```sh
+> # Create with hotplug ceilings
+> fastvmctl run -d --no-net --image alpine --name dev \
+>   --cpu 1 --max-cpu 4 --memory 128 --max-memory 512 \
+>   -- sh -c 'sleep infinity'
+> ```
+>
+> ```sh
+> # Grow the live sandbox immediately
+> fastvmctl modify dev --cpu 3 --memory 256
+>
+> # Verify inside the guest
+> fastvmctl exec dev -- sh -c 'nproc; grep MemTotal /proc/meminfo'
 > ```
 
 #### <img height="14" src="https://octicons-col.vercel.app/package/A770EF">&nbsp;&nbsp;Kernel Management
