@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"fastvm/internal/types"
 )
@@ -70,6 +71,7 @@ type FSManager struct {
 	defaultCOW   string
 	resize2fsBin string
 	e2fsckBin    string
+	templateMu   sync.Mutex
 }
 
 var _ Manager = (*FSManager)(nil)
@@ -104,6 +106,94 @@ func NewManager(opts Options) (*FSManager, error) {
 		e2fsckBin = "e2fsck"
 	}
 	return &FSManager{dir: dir, defaultCOW: defaultCOW, resize2fsBin: resizeBin, e2fsckBin: e2fsckBin}, nil
+}
+
+// templatePath is the cached resized clone for one base digest and root size.
+func (m *FSManager) templatePath(base types.BaseDisk, sizeGB int) string {
+	digest := strings.TrimPrefix(base.Digest, "sha256:")
+	if digest == "" {
+		return ""
+	}
+	return filepath.Join(m.dir, fmt.Sprintf(".template-%s-%dGiB%s", digest, sizeGB, volumeExt))
+}
+
+// ensureTemplate builds (or reuses) a resized clone so repeated sandboxes with
+// the same base and root size only pay for a clone, not e2fsck and resize2fs.
+func (m *FSManager) ensureTemplate(ctx context.Context, base types.BaseDisk, sizeGB int, baseSize, expected int64, mode string) (string, error) {
+	path := m.templatePath(base, sizeGB)
+	if path == "" {
+		return "", nil
+	}
+	m.templateMu.Lock()
+	defer m.templateMu.Unlock()
+	if info, err := os.Stat(path); err == nil && info.Size() == expected {
+		return path, nil
+	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("volume: stat template: %w", err)
+	}
+	tmp, err := os.CreateTemp(m.dir, ".tmp-template-*"+volumeExt)
+	if err != nil {
+		return "", fmt.Errorf("volume: create template: %w", err)
+	}
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	cloneSize := expected
+	if expected < baseSize {
+		cloneSize = baseSize
+	}
+	if _, err := cloneInto(ctx, mode, base.Path, tmp, cloneSize); err != nil {
+		return "", err
+	}
+	if err := tmp.Sync(); err != nil {
+		return "", fmt.Errorf("volume: fsync template: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return "", fmt.Errorf("volume: close template: %w", err)
+	}
+	if err := m.resizeClone(ctx, tmpPath, sizeGB, expected, baseSize); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return "", fmt.Errorf("volume: publish template: %w", err)
+	}
+	committed = true
+	return path, nil
+}
+
+// resizeClone grows or shrinks an offline ext4 clone.
+func (m *FSManager) resizeClone(ctx context.Context, path string, sizeGB int, expected, baseSize int64) error {
+	if expected == baseSize {
+		return nil
+	}
+	if expected < baseSize {
+		cmd := exec.CommandContext(ctx, m.e2fsckBin, "-f", "-y", path)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode() > 1 {
+				return fmt.Errorf("volume: e2fsck before shrink: %w: %s", err, strings.TrimSpace(string(output)))
+			}
+		}
+		cmd = exec.CommandContext(ctx, m.resize2fsBin, path, fmt.Sprintf("%dG", sizeGB))
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("volume: shrink %s to %d GiB: %w: %s", path, sizeGB, err, strings.TrimSpace(string(output)))
+		}
+		if err := os.Truncate(path, expected); err != nil {
+			return fmt.Errorf("volume: truncate shrunk volume: %w", err)
+		}
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, m.resize2fsBin, path)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("volume: resize %s to %d bytes: %w: %s", path, expected, err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 // Create clones base into <VolDir>/<sandboxID>.img.
@@ -199,14 +289,29 @@ func (m *FSManager) Create(ctx context.Context, sandboxID string, base types.Bas
 		}
 	}()
 
-	cloneSize := expected
-	if expected < baseSize {
-		// Shrink after cloning: truncating first would discard filesystem data.
-		cloneSize = baseSize
-	}
-	method, err := cloneInto(ctx, mode, base.Path, tmpFile, cloneSize)
-	if err != nil {
-		return Volume{}, err
+	method := ""
+	if expected != baseSize && base.Digest != "" {
+		template, err := m.ensureTemplate(ctx, base, sizeGB, baseSize, expected, mode)
+		if err != nil {
+			return Volume{}, err
+		}
+		method, err = cloneInto(ctx, mode, template, tmpFile, expected)
+		if err != nil {
+			return Volume{}, err
+		}
+	} else {
+		cloneSize := expected
+		if expected < baseSize {
+			cloneSize = baseSize
+		}
+		var err error
+		method, err = cloneInto(ctx, mode, base.Path, tmpFile, cloneSize)
+		if err != nil {
+			return Volume{}, err
+		}
+		if err := m.resizeClone(ctx, tmpPath, sizeGB, expected, baseSize); err != nil {
+			return Volume{}, err
+		}
 	}
 	if err := tmpFile.Sync(); err != nil {
 		return Volume{}, fmt.Errorf("volume: fsync volume: %w", err)
@@ -216,33 +321,6 @@ func (m *FSManager) Create(ctx context.Context, sandboxID string, base types.Bas
 	}
 	if err := tmpFile.Close(); err != nil {
 		return Volume{}, fmt.Errorf("volume: close volume: %w", err)
-	}
-	if expected != baseSize {
-		if expected < baseSize {
-			cmd := exec.CommandContext(ctx, m.e2fsckBin, "-f", "-y", tmpPath)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				var exitErr *exec.ExitError
-				if !errors.As(err, &exitErr) || exitErr.ExitCode() > 1 {
-					return Volume{}, fmt.Errorf("volume: e2fsck before shrink: %w: %s",
-						err, strings.TrimSpace(string(output)))
-				}
-			}
-			cmd = exec.CommandContext(ctx, m.resize2fsBin, tmpPath, fmt.Sprintf("%dG", sizeGB))
-			if output, err := cmd.CombinedOutput(); err != nil {
-				return Volume{}, fmt.Errorf("volume: shrink %s to %d GiB: %w: %s",
-					tmpPath, sizeGB, err, strings.TrimSpace(string(output)))
-			}
-			if err := os.Truncate(tmpPath, expected); err != nil {
-				return Volume{}, fmt.Errorf("volume: truncate shrunk volume: %w", err)
-			}
-		} else {
-			cmd := exec.CommandContext(ctx, m.resize2fsBin, tmpPath)
-			if output, err := cmd.CombinedOutput(); err != nil {
-				return Volume{}, fmt.Errorf("volume: resize %s to %d bytes: %w: %s",
-					tmpPath, expected, err, strings.TrimSpace(string(output)))
-			}
-		}
 	}
 	if err := os.Rename(tmpPath, target); err != nil {
 		return Volume{}, fmt.Errorf("volume: publish volume: %w", err)

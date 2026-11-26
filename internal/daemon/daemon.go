@@ -1386,13 +1386,15 @@ func (d *Daemon) sampleLocked(rt *runtime, sb *types.Sandbox) {
 			rt.guestMemoryBalloonedBytes = gs.MemoryBalloonedBytes
 		}
 	}
-	if st, err := d.net.Stats(context.Background(), sb.ID); err == nil {
-		rt.statsAt = now
-		rt.rxBytes, rt.txBytes = st.RxBytes, st.TxBytes
-		delta := (st.RxBytes - rt.lastNetRx) + (st.TxBytes - rt.lastNetTx)
-		rt.lastNetRx, rt.lastNetTx = st.RxBytes, st.TxBytes
-		if delta > 256 { // ignore pure ACKs/keepalives
-			d.touchLocked(rt, sb)
+	if sb.NetworkEnabled {
+		if st, err := d.net.Stats(context.Background(), sb.ID); err == nil {
+			rt.statsAt = now
+			rt.rxBytes, rt.txBytes = st.RxBytes, st.TxBytes
+			delta := (st.RxBytes - rt.lastNetRx) + (st.TxBytes - rt.lastNetTx)
+			rt.lastNetRx, rt.lastNetTx = st.RxBytes, st.TxBytes
+			if delta > 256 { // ignore pure ACKs/keepalives
+				d.touchLocked(rt, sb)
+			}
 		}
 	}
 }

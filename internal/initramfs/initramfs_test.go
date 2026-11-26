@@ -69,7 +69,7 @@ func TestIsInitramfsMode(t *testing.T) {
 
 func TestBuildMissingAgent(t *testing.T) {
 	if _, err := Build(filepath.Join(t.TempDir(), "missing"), t.TempDir()); err == nil ||
-		!strings.Contains(err.Error(), "read agent") {
+		!strings.Contains(err.Error(), "agent") {
 		t.Fatalf("missing agent error = %v", err)
 	}
 }

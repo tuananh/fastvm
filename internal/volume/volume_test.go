@@ -429,6 +429,30 @@ func TestCreateLargerThanBase(t *testing.T) {
 	}
 }
 
+func TestCreateReusesResizedTemplate(t *testing.T) {
+	dir := t.TempDir()
+	base, _, _ := makeBaseDiskFile(t, filepath.Join(dir, "base.img"), 4<<20)
+	counter := filepath.Join(dir, "resize-count")
+	script := filepath.Join(dir, "resize.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho x >> "+counter+"\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := newTestManager(t, filepath.Join(dir, "volumes"), COWCopy)
+	m.resize2fsBin = script
+	for _, id := range []string{"sb-cache-1", "sb-cache-2"} {
+		if _, err := m.Create(t.Context(), id, base, 1, COWCopy); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(counter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(data), "x"); got != 1 {
+		t.Fatalf("resize2fs ran %d times, want 1", got)
+	}
+}
+
 func TestCreateSmallerThanBase(t *testing.T) {
 	dir := t.TempDir()
 	base, _, _ := makeBaseDiskFile(t, filepath.Join(dir, "base.img"), 4<<30)

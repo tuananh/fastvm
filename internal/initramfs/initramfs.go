@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,9 +15,19 @@ import (
 )
 
 const (
-	newcMagic = "070701"
-	trailer   = "TRAILER!!!"
+	newcMagic    = "070701"
+	trailer      = "TRAILER!!!"
+	cacheVersion = 1
 )
+
+type cacheMeta struct {
+	Version      int    `json:"version"`
+	AgentSize    int64  `json:"agent_size"`
+	AgentModTime int64  `json:"agent_mod_time"`
+	Archive      string `json:"archive"`
+}
+
+func cachePath(outDir string) string { return filepath.Join(outDir, "cache.json") }
 
 type entry struct {
 	name string
@@ -27,20 +38,27 @@ type entry struct {
 // Build writes a gzip-compressed newc CPIO initramfs containing agentPath as
 // /init. It returns the output path.
 func Build(agentPath, outDir string) (string, error) {
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return "", err
+	}
+	info, err := os.Stat(agentPath)
+	if err != nil {
+		return "", fmt.Errorf("initramfs: stat agent: %w", err)
+	}
+	if cached, ok := loadCache(outDir, info); ok {
+		return cached, nil
+	}
 	agent, err := os.ReadFile(agentPath)
 	if err != nil {
 		return "", fmt.Errorf("initramfs: read agent: %w", err)
-	}
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return "", err
 	}
 	sum := sha256.Sum256(agent)
 	name := "agent-" + hex.EncodeToString(sum[:]) + ".cpio.gz"
 	dst := filepath.Join(outDir, name)
 	if _, err := os.Stat(dst); err == nil {
+		_ = writeCache(outDir, info, dst)
 		return dst, nil
 	}
-
 	entries := []entry{
 		{name: ".", mode: 0o040755 | 0o755},
 		{name: "init", mode: 0o100000 | 0o755, data: agent},
@@ -87,7 +105,55 @@ func Build(agentPath, outDir string) (string, error) {
 		return "", err
 	}
 	ok = true
+	if err := writeCache(outDir, info, dst); err != nil {
+		return "", err
+	}
 	return dst, nil
+}
+
+func loadCache(outDir string, info os.FileInfo) (string, bool) {
+	data, err := os.ReadFile(cachePath(outDir))
+	if err != nil {
+		return "", false
+	}
+	var meta cacheMeta
+	if json.Unmarshal(data, &meta) != nil || meta.Version != cacheVersion ||
+		meta.AgentSize != info.Size() || meta.AgentModTime != info.ModTime().UnixNano() ||
+		meta.Archive == "" {
+		return "", false
+	}
+	if st, err := os.Stat(meta.Archive); err != nil || !st.Mode().IsRegular() {
+		return "", false
+	}
+	return meta.Archive, true
+}
+
+func writeCache(outDir string, info os.FileInfo, archive string) error {
+	data, err := json.Marshal(cacheMeta{
+		Version: cacheVersion, AgentSize: info.Size(), AgentModTime: info.ModTime().UnixNano(), Archive: archive,
+	})
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(outDir, ".cache-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, cachePath(outDir)); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
 }
 
 func writeNewc(w *bytes.Buffer, entries []entry) error {

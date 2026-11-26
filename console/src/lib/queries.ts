@@ -46,12 +46,12 @@ export function useVersion() {
   return useQuery({ queryKey: queryKeys.version, queryFn: getVersion });
 }
 
-/** All sandboxes, polled every 3s. */
+/** All sandboxes, polled every 5s. */
 export function useSandboxes() {
   return useQuery({
     queryKey: queryKeys.sandboxes,
     queryFn: listSandboxes,
-    refetchInterval: 3_000,
+    refetchInterval: 5_000,
   });
 }
 
@@ -97,12 +97,12 @@ export function useKernels() {
   });
 }
 
-/** Cached utilization for all sandboxes, polled every 2s. */
+/** Cached utilization for all sandboxes, polled every 3s. */
 export function useAllSandboxStats() {
   return useQuery({
     queryKey: queryKeys.sandboxStatsAll,
     queryFn: getAllSandboxStats,
-    refetchInterval: 2_000,
+    refetchInterval: 3_000,
   });
 }
 
