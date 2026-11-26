@@ -1435,14 +1435,36 @@ func (d *Daemon) evaluateLocked(rt *runtime, sb *types.Sandbox) {
 		}
 		return
 	}
-	if rt.cpu.AboveFor(now, d.cfg.Lifecycle.IdleDetection.CPUWakePct, d.cfg.Lifecycle.IdleDetection.ExitHold.D()) {
-		rt.idleReason = "cpu activity"
-	} else {
-		rt.idleReason = "activity"
+	// Only leave Idle for real activity. The idle decision is also false while
+	// CPU hovers at the idle threshold; treating that as a wake made the state
+	// flap Running <-> Idle and reset the pause timer continuously.
+	reason, woke := d.idleExitReason(rt, sb, now)
+	if !woke {
+		return
 	}
-	if err := d.setStateLocked(d.ctx, rt, sb, types.StateRunning, rt.idleReason); err != nil {
+	rt.idleReason = reason
+	if err := d.setStateLocked(d.ctx, rt, sb, types.StateRunning, reason); err != nil {
 		d.log.Warn("leave idle failed", "sandbox", sb.ID, "err", err)
 	}
+}
+
+// idleExitReason reports whether a sandbox in Idle has a real reason to return
+// to Running. CPU must clear the wake threshold for the exit-hold duration; the
+// idle threshold alone is only an entry condition.
+func (d *Daemon) idleExitReason(rt *runtime, sb *types.Sandbox, now time.Time) (string, bool) {
+	if sb.NoAutoSleep {
+		return "auto-sleep disabled", true
+	}
+	if rt.execActive > 0 || rt.guestBusy {
+		return "activity", true
+	}
+	if !rt.idleSince.IsZero() && sb.LastActivityAt.After(rt.idleSince) {
+		return "activity", true
+	}
+	if rt.cpu.AboveFor(now, d.cfg.Lifecycle.IdleDetection.CPUWakePct, d.cfg.Lifecycle.IdleDetection.ExitHold.D()) {
+		return "cpu activity", true
+	}
+	return "", false
 }
 
 func (d *Daemon) deleteLocked(rt *runtime, sb *types.Sandbox) error {

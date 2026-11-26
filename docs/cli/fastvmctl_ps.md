@@ -14,6 +14,9 @@ fastvmctl ps
 
 Lists sandboxes with ID, name, state, image digest, IP, vCPUs, and memory.
 
+This is an inspection command and does not wake sleeping sandboxes. To run a
+command inside a sandbox, use `fastvmctl exec`; that wakes it first.
+
 ## OPTIONS
 
 No command-specific options.

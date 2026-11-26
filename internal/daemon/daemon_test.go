@@ -18,6 +18,7 @@ import (
 	"fastvm/internal/config"
 	"fastvm/internal/image"
 	"fastvm/internal/kernel"
+	"fastvm/internal/lifecycle"
 	"fastvm/internal/manager"
 	"fastvm/internal/network"
 	"fastvm/internal/store"
@@ -1585,4 +1586,28 @@ func TestRuntimeForStartsMonitor(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("monitor did not sample adopted runtime stats")
+}
+
+func TestIdleExitIgnoresThresholdCPU(t *testing.T) {
+	now := time.Now()
+	cfg := &config.Config{Lifecycle: config.Lifecycle{IdleDetection: config.IdleDetection{
+		CPUWakePct: 5, ExitHold: config.Duration(3 * time.Second),
+	}}}
+	d := &Daemon{cfg: cfg}
+	rt := &runtime{cpu: lifecycle.NewCPUWindow(lifecycle.IdleConfig{
+		Window: time.Minute, CPUWakePct: 5, ExitHold: 3 * time.Second,
+	})}
+	rt.cpu.Add(now.Add(-2*time.Second), 1.0)
+	rt.cpu.Add(now.Add(-time.Second), 1.0)
+	sb := &types.Sandbox{State: types.StateIdle, LastActivityAt: now.Add(-time.Minute)}
+	rt.idleSince = now.Add(-time.Minute)
+	if reason, woke := d.idleExitReason(rt, sb, now); woke {
+		t.Fatalf("CPU at idle threshold woke the sandbox: %s", reason)
+	}
+
+	// A real activity timestamp after entering Idle does wake it.
+	sb.LastActivityAt = now.Add(-time.Second)
+	if reason, woke := d.idleExitReason(rt, sb, now); !woke || reason != "activity" {
+		t.Fatalf("activity did not wake sandbox: woke=%v reason=%q", woke, reason)
+	}
 }

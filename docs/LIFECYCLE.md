@@ -31,8 +31,9 @@ fastvmctl rm dev                              # destroy
 ```
 
 - `resume` boots `Created`, wakes `Paused`, or restores `Dormant`.
-- Inbound network traffic, `exec`, `shell`, and API calls wake a sleeping
+- Inbound network traffic, `exec`, `shell`, `cp`, and `resume` wake a sleeping
   sandbox.
+- Inspection calls (`ps`, `get`, `logs`) read daemon/guest state without waking.
 - `--no-auto-sleep` disables automatic pause.
 - Automatic sleep is controlled by `lifecycle.idle_window`, `pause_after`, and
   `offload_after`.
