@@ -241,6 +241,9 @@ func bootArgs(cfg vmm.BootConfig, paths vmPaths, fsSocks []string) []string {
 		"--serial", "file=" + paths.serial,
 		"--console", "off",
 	}
+	if cfg.InitramfsPath != "" {
+		args = append(args, "--initramfs", cfg.InitramfsPath)
+	}
 	for _, path := range cfg.DataDisks {
 		args = append(args, "--disk", fmt.Sprintf("path=%s,image_type=raw", path))
 	}

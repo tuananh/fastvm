@@ -23,6 +23,9 @@ func newTestManager(t *testing.T, volDir, defaultCOW string) *FSManager {
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
+	// Tests use sparse non-ext4 fixture files; skip the real resize2fs step.
+	m.resize2fsBin = "/bin/true"
+	m.e2fsckBin = "/bin/true"
 	return m
 }
 
@@ -364,12 +367,6 @@ func TestCreateSizeMismatch(t *testing.T) {
 		wantIs error
 	}{
 		{
-			name:   "requested GiB differs from base",
-			base:   base,
-			sizeGB: 1,
-			wantIs: ErrSizeMismatch,
-		},
-		{
 			name:   "metadata size differs from file",
 			base:   types.BaseDisk{Path: basePath, SizeBytes: testBaseSize + 4096, Digest: base.Digest},
 			wantIs: ErrSizeMismatch,
@@ -410,6 +407,42 @@ func TestCreateSizeMismatch(t *testing.T) {
 			t.Fatal("expected error for directory base")
 		}
 	})
+}
+
+func TestCreateLargerThanBase(t *testing.T) {
+	dir := t.TempDir()
+	base, payload, offset := makeBaseDiskFile(t, filepath.Join(dir, "base.img"), testBaseSize)
+	m := newTestManager(t, filepath.Join(dir, "volumes"), COWCopy)
+	vol, err := m.Create(t.Context(), "sb-big", base, 1, COWCopy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vol.SizeBytes != 1<<30 {
+		t.Fatalf("size = %d, want 1GiB", vol.SizeBytes)
+	}
+	data, err := os.ReadFile(vol.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != 1<<30 || !bytes.Equal(data[offset:offset+int64(len(payload))], payload) {
+		t.Fatal("clone payload was not preserved")
+	}
+}
+
+func TestCreateSmallerThanBase(t *testing.T) {
+	dir := t.TempDir()
+	base, _, _ := makeBaseDiskFile(t, filepath.Join(dir, "base.img"), 4<<30)
+	m := newTestManager(t, filepath.Join(dir, "volumes"), COWCopy)
+	vol, err := m.Create(t.Context(), "sb-small", base, 1, COWCopy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vol.SizeBytes != 1<<30 {
+		t.Fatalf("size = %d, want 1GiB", vol.SizeBytes)
+	}
+	if info, err := os.Stat(vol.Path); err != nil || info.Size() != 1<<30 {
+		t.Fatalf("volume file size = %v err=%v", info, err)
+	}
 }
 
 func TestCreateValidation(t *testing.T) {

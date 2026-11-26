@@ -9,21 +9,22 @@ import (
 
 // BootConfig describes a cold boot.
 type BootConfig struct {
-	SandboxID   string
-	KernelPath  string
-	DiskPath    string   // raw writable volume
-	DataDisks   []string // extra raw writable volumes (vdb, vdc, ...)
-	VCPUs       int
-	MaxVCPUs    int
-	MemoryMB    int
-	MaxMemoryMB int
-	TAPName     string // empty = no NIC
-	MAC         string
-	GuestCID    uint32
-	VsockUDPath string // host-side unix socket path for virtio-vsock
-	APISocket   string // host-side unix socket for the VMM API
-	SerialPath  string // serial console log file
-	Cmdline     string // kernel cmdline
+	SandboxID     string
+	KernelPath    string
+	InitramfsPath string
+	DiskPath      string   // raw writable volume
+	DataDisks     []string // extra raw writable volumes (vdb, vdc, ...)
+	VCPUs         int
+	MaxVCPUs      int
+	MemoryMB      int
+	MaxMemoryMB   int
+	TAPName       string // empty = no NIC
+	MAC           string
+	GuestCID      uint32
+	VsockUDPath   string // host-side unix socket path for virtio-vsock
+	APISocket     string // host-side unix socket for the VMM API
+	SerialPath    string // serial console log file
+	Cmdline       string // kernel cmdline
 	// Volumes are host directories shared into the guest over virtio-fs.
 	Volumes []types.Volume
 }

@@ -15,7 +15,7 @@ import (
 )
 
 // Pull downloads ref from its OCI registry, flattens the image layers into a
-// temporary rootfs, injects the guest agent/init, and writes a base disk.
+// temporary rootfs and writes a base disk.
 func (b *FSBuilder) Pull(ctx context.Context, spec PullSpec) (types.BaseDisk, error) {
 	if err := ctx.Err(); err != nil {
 		return types.BaseDisk{}, err

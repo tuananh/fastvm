@@ -25,6 +25,70 @@ func ensureGuestFilesystems() {
 		log.Printf("fastvm-agent: not PID 1; skipping guest filesystem mounts")
 		return
 	}
+	mountRuntimeFilesystems()
+	if initramfsMode() {
+		if err := mountRootAndEnter(); err != nil {
+			log.Printf("fastvm-agent: fatal initramfs root: %v", err)
+			os.Exit(1)
+		}
+		// The initramfs mounts are hidden after chroot; recreate them inside
+		// the OCI rootfs before mounting volumes and starting the workload.
+		mountRuntimeFilesystems()
+	}
+	mountCmdlineVolumes()
+	mountCmdlineDataVolumes()
+}
+
+// initramfsMode reports whether the agent is running from an initramfs and must
+// mount the OCI root disk itself.
+func initramfsMode() bool {
+	data, err := os.ReadFile("/proc/cmdline")
+	if err != nil {
+		return false
+	}
+	for _, field := range strings.Fields(string(data)) {
+		if field == "fastvm.initramfs=1" {
+			return true
+		}
+	}
+	return false
+}
+
+// mountRootAndEnter mounts the root disk read-write and chroots into it.
+func mountRootAndEnter() error {
+	cmdline, err := os.ReadFile("/proc/cmdline")
+	if err != nil {
+		return err
+	}
+	rootDev := "/dev/vda"
+	for _, field := range strings.Fields(string(cmdline)) {
+		if strings.HasPrefix(field, "root=") {
+			if value := strings.TrimPrefix(field, "root="); value != "" {
+				rootDev = value
+			}
+			break
+		}
+	}
+	if !strings.HasPrefix(rootDev, "/dev/") {
+		return fmt.Errorf("unsupported root device %q", rootDev)
+	}
+	if err := os.MkdirAll("/newroot", 0o755); err != nil {
+		return err
+	}
+	if err := unix.Mount(rootDev, "/newroot", "ext4", 0, ""); err != nil {
+		return fmt.Errorf("mount %s: %w", rootDev, err)
+	}
+	if err := unix.Chroot("/newroot"); err != nil {
+		return fmt.Errorf("chroot: %w", err)
+	}
+	if err := os.Chdir("/"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// mountRuntimeFilesystems mounts proc/sys/dev and the runtime tmpfs mounts.
+func mountRuntimeFilesystems() {
 	_ = os.MkdirAll("/proc", 0o755)
 	_ = os.MkdirAll("/sys", 0o755)
 	_ = os.MkdirAll("/dev", 0o755)
@@ -87,8 +151,6 @@ func ensureGuestFilesystems() {
 		}
 	}
 
-	mountCmdlineVolumes()
-	mountCmdlineDataVolumes()
 }
 
 // mountCmdlineVolumes mounts virtio-fs shares described by

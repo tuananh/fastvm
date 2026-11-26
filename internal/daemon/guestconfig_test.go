@@ -66,7 +66,7 @@ func TestBootCmdlineCarriesGuestIdentity(t *testing.T) {
 		Resolv:   "nameserver 8.8.8.8\n",
 		Hosts:    "127.0.0.1 localhost\n",
 	}
-	cmd := bootCmdline(&sb, "deadbeef", guest)
+	cmd := bootCmdline(&sb, "deadbeef", guest, false)
 	for _, want := range []string{
 		"fastvm.hostname=0123456789ab",
 		"fastvm.resolv=",

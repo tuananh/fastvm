@@ -17,8 +17,8 @@ Design and roadmap: [DESIGN.md](DESIGN.md). CLI/API/limits summary: [README.md](
 | Cloud Hypervisor v54+ | `cloud-hypervisor`, or the static build `cloud-hypervisor-static` (this host: `/usr/bin/cloud-hypervisor-static`, v54.0). Check with `cloud-hypervisor --version` / `cloud-hypervisor-static --version`. The daemon searches `cloud-hypervisor` then `cloud-hypervisor-static` on `PATH`; override with `vmm.binary` (absolute path) or `FASTVM_CLOUD_HYPERVISOR`. |
 | virtiofsd ≥ 1.10 | Serves host-directory volumes over virtio-fs. The distro package often ships `/usr/lib/virtiofsd` instead of putting `virtiofsd` on `PATH`; the daemon falls back to it. Only needed for `--volume` sandboxes. Override with `vmm.virtiofsd` / `FASTVM_VIRTIOFSD`. |
 | Go 1.24+ | Only to build from source. |
-| Kernel image | `make assets` downloads the pinned Cloud Hypervisor test kernel (`vmlinux-x86_64`, sha256 `edfeb8a8…a853`) into `test/e2e/assets/vmlinux.bin` and links it at `/tmp/fastvm/kernels/current` for the demo config. Use `fastvmctl kernel download/use` to manage kernels through the daemon, or point `kernel_path` at your own pinned kernel with virtio-pci/virtio-fs built in. |
-| e2fsprogs (`mke2fs`), `nft` | Base disk creation and DNAT rules. |
+| Kernel image | Install through the daemon with `fastvmctl kernel download --set-default`, or point `kernel_path` at your own pinned kernel with virtio-pci/virtio-fs built in. `make assets` is only for gated e2e test assets. |
+| e2fsprogs (`mke2fs`, `e2fsck`, `resize2fs`), `nft` | Base disk creation, per-sandbox root sizing, and DNAT rules. `resize2fs` is required only for `--root-size-gb`. |
 
 > The public sandbox this repo was developed in runs as an unprivileged user, so
 > it cannot create TAP/bridge/nftables. Run the walkthrough below on a normal
@@ -33,17 +33,23 @@ Design and roadmap: [DESIGN.md](DESIGN.md). CLI/API/limits summary: [README.md](
 git clone <this repo> fastvm && cd fastvm
 make build            # bin/fastvmctl, bin/fastvmd, bin/fastvm-agent
 make test             # unit tests (no KVM/root needed)
-make assets           # Cloud Hypervisor kernel + Alpine rootfs for demos/e2e (cached, gitignored)
+# make assets          # optional: kernel + Alpine rootfs for gated e2e tests
 sudo make install     # /usr/local/bin (or: make install PREFIX=$HOME/.local)
 ```
 
-`make assets` downloads the prebuilt Cloud Hypervisor test kernel
-(`ch-release-v7.2.8-20261009/vmlinux-x86_64`, SHA-256 verified) and an Alpine
-rootfs into `test/e2e/assets/`, then prints those paths plus whether a Cloud
-Hypervisor binary and `virtiofsd` are available on the host (it never installs
-them).
+Normal installs do not need `make assets`. Start the daemon, then download the
+kernel through it:
 
-You can also manage kernels through the daemon:
+```sh
+sudo fastvmd --config hack/config.yaml
+fastvmctl kernel download --set-default
+```
+
+`make assets` is only for the gated e2e suite: it downloads the prebuilt Cloud
+Hypervisor test kernel (`ch-release-v7.2.8-20261009/vmlinux-x86_64`, SHA-256
+verified) and an Alpine rootfs into `test/e2e/assets/`.
+
+Kernels are managed through the daemon:
 
 ```sh
 fastvmctl kernel remote-ls
@@ -163,7 +169,7 @@ bin/fastvmctl image ls
 `image pull` is optional.
 
 How it works: fastvm talks directly to the OCI registry (no Docker daemon or
-CLI), flattens the image layers into a rootfs, injects the guest agent + init,
+CLI), flattens the image layers into a rootfs,
 and creates a **content-addressed ext4 base disk** in `$DATA_DIR/images/`.
 Identical inputs hit the cache; the base disk is read-only and shared by
 sandboxes. Compressed layers are cached by digest under
@@ -176,8 +182,8 @@ credentials are read from
 the Docker config keychain (`~/.docker/config.json`), so private registries work
 without the Docker daemon.
 
-Optional flag: `--size-gb N` (base disk size; defaults to `storage.root_size_gb`,
-8 GiB). To shrink the boot disk, set `storage.root_size_gb: 2`, restart the daemon,
+Optional flag: `--size-gb N` (base disk size; defaults to `storage.default_image_size_gb`,
+8 GiB). To shrink the image disk, set `storage.default_image_size_gb: 2`, restart the daemon,
 and rebuild images; existing cached images keep their old size until re-pulled.
 Remove an image
 once no sandbox references it; `--force` overrides the reference check and
@@ -418,7 +424,7 @@ image pull [--size-gb N] <tag|digest>          pull an OCI image into the base-d
 image ls                                    list cached base disks
 image rm [--force] <tag|digest>...          delete images and their tags
 run    --image <tag|digest> [flags] -- <cmd...>          create a sandbox
-       --name, --cpu, --max-cpu, --memory, --max-memory, --kernel <release>, --publish h:g[/tcp|udp], --env K=V, --no-auto-sleep
+       --name, --cpu, --max-cpu, --memory, --max-memory, --root-size-gb, --kernel <release>, --publish h:g[/tcp|udp], --env K=V, --no-auto-sleep
 ls                                          list sandboxes
 get <sandbox>                               full sandbox JSON record
 exec <sandbox> -- <cmd...>                  run a command in the guest (auto-wakes if asleep)
@@ -471,8 +477,8 @@ starting point; full schema is in `internal/config/config.go`.
 |---|---|---|
 | `data_dir` | `/tmp/fastvm-demo-data` | state, images, volumes, sandbox dirs |
 | `socket_path` | `/run/fastvm/fastvm.sock` | API unix socket |
-| `kernel_path` | `/tmp/fastvm/kernels/current` | demo kernel symlink installed by `make assets`; switch with `fastvmctl kernel use` |
-| `agent_path` | `bin/fastvm-agent` | guest agent injected into images |
+| `kernel_path` | `/tmp/fastvm/kernels/current` | demo kernel symlink; install with `fastvmctl kernel download --set-default` |
+| `agent_path` | `bin/fastvm-agent` | guest agent packaged into the boot initramfs |
 | `vmm.binary` | `cloud-hypervisor` | VMM executable (absolute path or name; falls back to `cloud-hypervisor-static`, override with `FASTVM_CLOUD_HYPERVISOR`) |
 | `vmm.virtiofsd` | `virtiofsd` | virtio-fs server for host volumes (falls back to `/usr/lib/virtiofsd`; override with `FASTVM_VIRTIOFSD`) |
 | `host_volumes.allowed_prefixes` | `[]` | absolute host paths allowed as `--volume` shares; empty/absent denies all host mounts (distinct from `storage.*`, which configures writable storage) |
@@ -490,7 +496,8 @@ starting point; full schema is in `internal/config/config.go`.
 | `lifecycle.wake_policy.max_wakes_per_minute` | `6` | scan protection per sandbox |
 | `lifecycle.wake_policy.coalesce_window` | `100ms` | burst coalescing |
 | `storage.cow` | `reflink` | `reflink` on XFS/btrfs, `copy` fallback |
-| `storage.root_size_gb` | `8` | base/root disk size used for new image builds; images that need more fail (existing images must be re-pulled) |
+| `storage.default_image_size_gb` | `8` | ext4 base image capacity; images that need more fail (existing images must be re-pulled) |
+| `--root-size-gb` | image size | grow or shrink the writable sandbox root without rebuilding the image |
 | `storage.discard_on_destroy` | `true` | remove the writable volume with the sandbox |
 | `network.datapath.mode` | `ebpf` | `ebpf` (default; automatic `bridge` fallback without CAP_BPF) or `bridge` |
 | `network.dns` | host resolvers | nameserver overrides (non-loopback IPv4); empty mirrors the host `/etc/resolv.conf`, like Docker |

@@ -1,4 +1,4 @@
-// Command fastvm-agent is the static guest agent injected into fastvm base images.
+// Command fastvm-agent is the static guest agent packaged into the fastvm initramfs.
 // It runs as PID 1 inside the microVM, serves the newline-delimited JSON
 // protocol over virtio-vsock (see internal/agent), and owns the sandbox
 // workload (docs/DESIGN.md §6.2, §6.4).

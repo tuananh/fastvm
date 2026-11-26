@@ -62,6 +62,8 @@ start:
 FASTVM_SOCKET ?= /run/fastvm/fastvm.sock
 FASTVM ?= $(BIN)/fastvmctl
 
+# Gated e2e test assets (kernel + Alpine rootfs). Normal installs use
+# `fastvmctl kernel download` instead.
 assets:
 	./test/e2e/fetch-assets.sh
 	mkdir -p /tmp/fastvm/kernels

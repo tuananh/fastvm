@@ -1189,7 +1189,7 @@ func TestCloseSnapshotsActiveSandboxForRestart(t *testing.T) {
 
 func TestBootCmdlineIncludesEntropySeed(t *testing.T) {
 	sb := types.Sandbox{TAPName: "tap0", IP: "10.77.0.2", Gateway: "10.77.0.1"}
-	cmd := bootCmdline(&sb, "deadbeef", guestBootFiles{})
+	cmd := bootCmdline(&sb, "deadbeef", guestBootFiles{}, false)
 	if !strings.Contains(cmd, " fastvm.seed=deadbeef") {
 		t.Fatalf("cmdline missing entropy seed: %q", cmd)
 	}

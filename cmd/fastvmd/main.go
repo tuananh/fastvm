@@ -94,7 +94,12 @@ func runDaemon(ctx context.Context, opts daemonOptions) error {
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
 	if _, err := os.Stat(cfg.KernelPath); err != nil {
-		log.Warn("kernel image not found; sandboxes will fail to boot", "path", cfg.KernelPath, "err", err)
+		log.Warn("kernel image not found; install one or use fastvmctl kernel download", "path", cfg.KernelPath, "err", err)
+	}
+	if cfg.AgentPath == "" {
+		log.Warn("agent_path is empty; sandboxes cannot boot")
+	} else if _, err := os.Stat(cfg.AgentPath); err != nil {
+		log.Warn("guest agent not found; sandboxes cannot boot", "path", cfg.AgentPath, "err", err)
 	}
 
 	st, err := store.Open(filepath.Join(cfg.DataDir, "state.db"))
@@ -104,9 +109,9 @@ func runDaemon(ctx context.Context, opts daemonOptions) error {
 	defer st.Close()
 
 	images, err := image.NewBuilder(image.Options{
-		BaseDir:   filepath.Join(cfg.DataDir, "images"),
-		AgentPath: cfg.AgentPath,
-		InitPath:  cfg.InitPath,
+		BaseDir: filepath.Join(cfg.DataDir, "images"),
+		// The guest agent is delivered by the daemon-built initramfs; base
+		// images do not embed the agent, so agent upgrades do not invalidate them.
 	})
 	if err != nil {
 		return fmt.Errorf("image builder: %w", err)

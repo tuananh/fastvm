@@ -55,6 +55,7 @@ echo "  FASTVM_ROOTFS=$DIR/rootfs"
 # host-directory volumes) are system packages.
 CH_BIN="$(command -v cloud-hypervisor || command -v cloud-hypervisor-static || true)"
 VIRTIOFSD_BIN="$(command -v virtiofsd || true)"
+RESIZE2FS_BIN="$(command -v resize2fs || true)"
 if [[ -z "$VIRTIOFSD_BIN" && -x /usr/lib/virtiofsd ]]; then
   VIRTIOFSD_BIN=/usr/lib/virtiofsd
 fi
@@ -69,5 +70,10 @@ if [[ -n "$VIRTIOFSD_BIN" ]]; then
   echo "  virtiofsd: $VIRTIOFSD_BIN"
 else
   echo "  virtiofsd: MISSING — install virtiofsd >= 1.10 (distro package usually ships /usr/lib/virtiofsd); only needed for host-directory volumes"
+fi
+if [[ -n "$RESIZE2FS_BIN" ]]; then
+  echo "  resize2fs: $RESIZE2FS_BIN"
+else
+  echo "  resize2fs: MISSING — install e2fsprogs; needed for --root-size-gb"
 fi
 echo "  override hints: FASTVM_CLOUD_HYPERVISOR / FASTVM_VIRTIOFSD (e2e) or vmm.binary / vmm.virtiofsd (daemon config)"

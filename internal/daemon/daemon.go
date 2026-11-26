@@ -20,6 +20,7 @@ import (
 	"fastvm/internal/agent"
 	"fastvm/internal/config"
 	"fastvm/internal/image"
+	"fastvm/internal/initramfs"
 	"fastvm/internal/lifecycle"
 	"fastvm/internal/manager"
 	"fastvm/internal/names"
@@ -62,6 +63,8 @@ type Daemon struct {
 	ifIndex func(string) (int, error)
 	log     *slog.Logger
 	now     func() time.Time
+
+	initramfs string
 
 	mu       sync.Mutex
 	runtimes map[string]*runtime
@@ -132,6 +135,18 @@ func New(deps Deps) (*Daemon, error) {
 		autoReserved: make(map[int]bool),
 		ctx:          ctx, cancel: cancel,
 		lastWake: make(map[string]time.Time), wakeTimes: make(map[string][]time.Time),
+	}
+	if deps.Config.AgentPath != "" {
+		if _, statErr := os.Stat(deps.Config.AgentPath); statErr == nil {
+			initrd, err := initramfs.Build(deps.Config.AgentPath, filepath.Join(deps.Config.DataDir, "initramfs"))
+			if err != nil {
+				log.Warn("initramfs build failed; falling back to image injection", "agent", deps.Config.AgentPath, "err", err)
+			} else {
+				d.initramfs = initrd
+			}
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			log.Warn("guest agent not accessible; sandboxes cannot boot", "path", deps.Config.AgentPath, "err", statErr)
+		}
 	}
 	if d.sw != nil && d.sw.Mode() != l2switch.ModeBridge {
 		if up, ok := d.net.(network.UplinkProvider); ok {
@@ -289,6 +304,10 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 	if maxVCPUs < vcpus || maxMem < mem {
 		return types.Sandbox{}, fmt.Errorf("%w: max_vcpus/max_memory_mb must be >= vcpus/memory_mb", manager.ErrInvalid)
 	}
+	rootSizeGB := opts.RootSizeGB
+	if rootSizeGB < 0 {
+		return types.Sandbox{}, fmt.Errorf("%w: root_size_gb must not be negative", manager.ErrInvalid)
+	}
 	if err := validateVolumes(d.cfg, opts.Volumes); err != nil {
 		return types.Sandbox{}, err
 	}
@@ -372,12 +391,13 @@ func (d *Daemon) Create(ctx context.Context, opts manager.CreateOptions) (types.
 	rt.autoBase = append([]types.PortMapping(nil), opts.Ports...)
 	rt.autoHost = make(map[int]int)
 
-	vol, err := d.vol.Create(ctx, id, base, 0, d.cfg.Storage.COW) // 0 = use base disk size
+	vol, err := d.vol.Create(ctx, id, base, rootSizeGB, d.cfg.Storage.COW)
 	if err != nil {
 		d.fail(ctx, rt, "volume: %v", err)
 		return types.Sandbox{}, err
 	}
 	sb.VolumePath = vol.Path
+	sb.RootSizeGB = int(vol.SizeBytes >> 30)
 	dataVols, err := d.createDataVolumes(ctx, id, opts.DataVolumes)
 	if err != nil {
 		d.removeDataVolumes(sb.DataVolumes)
@@ -482,22 +502,23 @@ func (d *Daemon) bootLocked(ctx context.Context, rt *runtime) error {
 		kernelPath = sb.KernelPath
 	}
 	vm, err := d.vmmD.Boot(ctx, vmm.BootConfig{
-		SandboxID:   sb.ID,
-		KernelPath:  kernelPath,
-		DiskPath:    sb.VolumePath,
-		DataDisks:   dataDiskPaths(sb.DataVolumes),
-		VCPUs:       sb.VCPUs,
-		MaxVCPUs:    sb.MaxVCPUs,
-		MemoryMB:    sb.MemoryMB,
-		MaxMemoryMB: sb.MaxMemoryMB,
-		TAPName:     sb.TAPName,
-		MAC:         sb.MAC,
-		GuestCID:    guestCID(sb.IP),
-		VsockUDPath: sb.VsockUDPath,
-		APISocket:   sb.VMMAPISock,
-		SerialPath:  sb.SerialPath,
-		Volumes:     sb.Volumes,
-		Cmdline:     bootCmdline(sb, entropySeed(), d.guestBootFiles(sb)),
+		SandboxID:     sb.ID,
+		KernelPath:    kernelPath,
+		InitramfsPath: d.initramfs,
+		DiskPath:      sb.VolumePath,
+		DataDisks:     dataDiskPaths(sb.DataVolumes),
+		VCPUs:         sb.VCPUs,
+		MaxVCPUs:      sb.MaxVCPUs,
+		MemoryMB:      sb.MemoryMB,
+		MaxMemoryMB:   sb.MaxMemoryMB,
+		TAPName:       sb.TAPName,
+		MAC:           sb.MAC,
+		GuestCID:      guestCID(sb.IP),
+		VsockUDPath:   sb.VsockUDPath,
+		APISocket:     sb.VMMAPISock,
+		SerialPath:    sb.SerialPath,
+		Volumes:       sb.Volumes,
+		Cmdline:       bootCmdline(sb, entropySeed(), d.guestBootFiles(sb), d.initramfs != ""),
 	})
 	if err != nil {
 		d.event(ctx, sb.ID, "error", fmt.Sprintf("vmm boot: %v", err))
@@ -1018,11 +1039,16 @@ func (d *Daemon) PullImage(ctx context.Context, spec manager.PullOptions) (types
 	}
 	sizeGB := spec.SizeGB
 	if sizeGB == 0 {
-		sizeGB = d.cfg.Storage.RootSizeGB
+		sizeGB = d.cfg.Storage.DefaultImageSizeGB
+	}
+	agentPath, initPath := d.cfg.AgentPath, d.cfg.InitPath
+	if d.initramfs != "" {
+		// The agent now comes from the initramfs; do not embed it in base images.
+		agentPath, initPath = "", ""
 	}
 	return d.img.Pull(ctx, image.PullSpec{
 		Ref: spec.Ref, SizeGB: sizeGB,
-		AgentPath: d.cfg.AgentPath, InitPath: d.cfg.InitPath,
+		AgentPath: agentPath, InitPath: initPath,
 	})
 }
 
@@ -1034,10 +1060,14 @@ func (d *Daemon) IngestRootfs(ctx context.Context, rootfsDir, tag string) (types
 	if tag == "" || rootfsDir == "" {
 		return types.BaseDisk{}, fmt.Errorf("%w: rootfs_dir and tag required", manager.ErrInvalid)
 	}
-	sizeGB := d.cfg.Storage.RootSizeGB
+	sizeGB := d.cfg.Storage.DefaultImageSizeGB
+	agentPath, initPath := d.cfg.AgentPath, d.cfg.InitPath
+	if d.initramfs != "" {
+		agentPath, initPath = "", ""
+	}
 	return d.img.Ingest(ctx, image.IngestSpec{
 		RootfsDir: rootfsDir, Tag: tag, SizeGB: sizeGB,
-		AgentPath: d.cfg.AgentPath, InitPath: d.cfg.InitPath,
+		AgentPath: agentPath, InitPath: initPath,
 	})
 }
 
@@ -1763,8 +1793,11 @@ func dataDiskPaths(vols []types.DataVolume) []string {
 	return out
 }
 
-func bootCmdline(sb *types.Sandbox, seed string, guest guestBootFiles) string {
+func bootCmdline(sb *types.Sandbox, seed string, guest guestBootFiles, initramfs bool) string {
 	cmd := "console=ttyS0 root=/dev/vda rw init=/init"
+	if initramfs {
+		cmd += " fastvm.initramfs=1"
+	}
 	for i := range sb.DataVolumes {
 		cmd += fmt.Sprintf(" fastvm.data.%d=%s", i, sb.DataVolumes[i].Mount)
 	}

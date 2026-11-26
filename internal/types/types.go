@@ -54,8 +54,9 @@ type BaseDisk struct {
 	Tag       string    `json:"tag,omitempty"`
 	Tags      []string  `json:"tags,omitempty"` // current tag aliases, from the tag index
 	Digest    string    `json:"digest"`
-	Path      string    `json:"path"`
-	SizeBytes int64     `json:"size_bytes"`
+	Path           string    `json:"path"`
+	SizeBytes      int64     `json:"size_bytes"`      // virtual ext4 capacity
+	AllocatedBytes int64     `json:"allocated_bytes"` // sparse file allocation on disk
 	Source    string    `json:"source"` // "registry" or "rootfs"
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -68,6 +69,7 @@ type Sandbox struct {
 	Kernel         string        `json:"kernel,omitempty"`      // selected release
 	KernelPath     string        `json:"kernel_path,omitempty"` // resolved host path
 	VolumePath     string        `json:"volume_path"`
+	RootSizeGB     int           `json:"root_size_gb,omitempty"`
 	VCPUs          int           `json:"vcpus"`
 	MaxVCPUs       int           `json:"max_vcpus,omitempty"`
 	MemoryMB       int           `json:"memory_mb"`

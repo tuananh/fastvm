@@ -150,15 +150,18 @@ More CLI details, including auto-publish, snapshots, and console access, are in
 ## Install
 
 ```sh
-make build && make assets   # binaries + pinned Cloud Hypervisor kernel
+make build
 sudo make install
 
 # terminal 1 — root daemon with the demo config
 sudo fastvmd --config hack/config.yaml
 
-# terminal 2
+# terminal 2 — install the daemon kernel, then boot
+fastvmctl kernel download --set-default
 fastvmctl run --image alpine -- uname -a
 ```
+
+`make assets` is only needed for the gated e2e tests and their Alpine rootfs.
 
 ## Features
 
@@ -173,8 +176,8 @@ fastvmctl run --image alpine -- uname -a
 - **Snapshots.** Save RAM/CPU/disk and restore independent copies.
 - **Volumes and ports.** virtio-fs host mounts, writable block data volumes, and
   published ports.
-- **Elastic sizing.** Boot-time CPU/memory plus hotplug ceilings and a virtio
-  balloon enabled by default.
+- **Elastic sizing.** Per-sandbox root disks without image rebuilds, boot-time
+  CPU/memory plus hotplug ceilings, and a virtio balloon enabled by default.
 - **Declarative configs and console.** Run `.fvmfile` sandboxes (e.g. coding
   agents), and use the OIDC web console.
 
@@ -182,7 +185,8 @@ fastvmctl run --image alpine -- uname -a
 
 Linux x86_64 with KVM, [Cloud Hypervisor](https://www.cloudhypervisor.org/)
 v54+ (`cloud-hypervisor`, or the static build `cloud-hypervisor-static`),
-virtiofsd ≥ 1.10 (only for host-directory volumes), and Go 1.24+ to build. The
+virtiofsd ≥ 1.10 (only for host-directory volumes), e2fsprogs (`mke2fs`, plus
+`e2fsck` / `resize2fs` for per-sandbox root sizing), and Go 1.24+ to build. The
 daemon needs root/`CAP_NET_ADMIN` for TAP/veth/nftables; `CAP_BPF` enables the
 eBPF datapath, otherwise it falls back to the Linux bridge. Images are pulled
 directly from OCI registries; no Docker daemon or CLI is required.

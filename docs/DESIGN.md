@@ -339,7 +339,7 @@ memory:
   reserve_mb: 1024        # never schedule below this
 storage:
   cow: reflink            # reflink (default) | dm-thin | copy
-  root_size_gb: 8
+  default_image_size_gb: 8
   discard_on_destroy: true
 network:
   datapath:
@@ -494,18 +494,19 @@ actual VMM process on startup.
 | **VMM driver (`internal/vmm`)** | Interface: `Create, Start, Pause, Resume, Snapshot, Restore, Stop, Stats`. The Cloud Hypervisor driver launches one `cloud-hypervisor` process per sandbox (all devices at launch) and drives pause/resume/snapshot/shutdown through CH's REST API over a per-sandbox unix socket (no cgo). Host-directory volumes add one `virtiofsd` process and one `--fs` device per share. |
 | **Wake dispatcher (`internal/wake`)** | Consumes wake notifications from the eBPF switch (AF_PACKET tap fallback in bridge mode); coalesces bursts, rate-limits scans, marks `wake_no_response`. It never holds, injects, or reorders frames. |
 | **eBPF L2 switch (`internal/switch`)** | Per-host tc `clsact` eBPF programs + BPF maps: static MAC→port table, `bpf_redirect` between sandbox TAPs and the uplink, per-port MAC anti-spoofing, default sandbox isolation, per-port byte/packet counters, and a ringbuf wake-event channel. Loaded via `cilium/ebpf`; bridge-mode fallback for dev/CI. |
-| **Image builder (`internal/image`)** | OCI registry pull → unpacked rootfs → ext4 base disk (guest agent + init injected); content-addressed cache; `fastvm image pull`/`image ls`. |
+| **Image builder (`internal/image`)** | OCI registry pull → unpacked rootfs → ext4 base disk; static agent in a generated initramfs; content-addressed cache; `fastvm image pull`/`image ls`. |
 | **Volumes (`internal/volume`)** | Base-disk store (read-only, content-addressed) and per-sandbox CoW runtime volumes (reflink default, dm-thin fallback); clone, attach, discard, GC, refcounts. Host-directory volumes are validated against `host_volumes.allowed_prefixes` and attached at create time (virtio-fs, static). |
 | **Network (`internal/network`)** | Per-sandbox TAP as switch port + shared `fvup`/`fvuplink` uplink veth, nftables NAT/DNAT for published ports, static neighbor entries, MAC/IP allocation. |
 | **Snapshot & restore (`internal/snapshot`)** | Cloud Hypervisor snapshots (config + memory + device state) of the paused VM, restore with `--restore` (starts paused; file-backed memory, kernel demand paging), virtiofsd restart before restore, restore-time measurement, fsync/GC, disk budget. CH's `ondemand`/`copyonwrite` (uffd) restore modes are a later optimisation. |
-| **Guest agent (`cmd/fastvm-agent`)** | Static Go binary in the rootfs over vsock (Cloud Hypervisor virtio-vsock; the guest/host `CONNECT <port>` protocol is unchanged): Ready handshake, exec, signals, workload lifecycle events, stdout/stderr pump (logs, not activity), per-boot `/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf` writer, `touch`, `workload_busy` advisory, clock/NTP note after resume, reconnect after vsock reset. |
+| **Guest agent (`cmd/fastvm-agent`)** | Static Go binary in the boot initramfs over vsock (Cloud Hypervisor virtio-vsock; the guest/host `CONNECT <port>` protocol is unchanged): Ready handshake, exec, signals, workload lifecycle events, stdout/stderr pump (logs, not activity), per-boot `/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf` writer, `touch`, `workload_busy` advisory, clock/NTP note after resume, reconnect after vsock reset. |
 | **Image manager (`internal/image`)** | Resolve/pull OCI images, unpack rootfs for the base-disk builder, and resolve base-disk digests for volumes. Kernel is pinned per host config, not taken from the image. |
 | **Store (`internal/store`)** | bbolt: sandbox records, desired state, activity timestamps, memory-image metadata, events index. |
 | **CLI (`cmd/fastvm`)** | Thin client: `run, ls, exec, shell, logs, pause, offload, resume, rm, events, host`. |
 
 ### 6.3 Key data flows
 
-**Pull** → OCI image → unpack rootfs → inject guest agent + init config →
+**Pull** → OCI image → unpack rootfs → ext4 base disk; the daemon
+generates an initramfs containing the static agent →
 `mke2fs -d` → content-addressed base disk (sha256) → cache; `fastvm image
 pull`/`image ls` expose it. Compressed layers are cached by digest and reused
 across images.
@@ -607,7 +608,8 @@ the CoW volume and memory image; drop the base-disk reference; delete record.
 ### 6.5 Storage: base disks, CoW runtime volumes, host shares
 
 - **Base disks** are pulled from OCI registries (or ingested rootfs trees) as raw
-  ext4 images: fastvm pulls and flattens the image, injects the guest agent +
+  ext4 images: fastvm pulls and flattens the image without the guest agent; the
+agent is supplied by a boot initramfs, while
   init configuration, and creates the disk with `mke2fs -d`. The result is content-addressed (sha256), read-only, and shared
   by every sandbox using that image; the pinned kernel stays separate.
 - **Pull pipeline:** `fastvm image pull name:tag` → OCI registry → rootfs →
@@ -728,7 +730,7 @@ internal/switch/      eBPF L2 switch loader + programs (bpf2go)
 internal/network/     netns, veth, tap, in-netns bridge, nat/dnat, neighbors
 internal/wake/        wake dispatcher (switch events / AF_PACKET fallback)
 internal/snapshot/    Cloud Hypervisor snapshot dir, restore, gc
-internal/image/       OCI pull/unpack, agent injection
+internal/image/       OCI pull/unpack and ext4 base disks
 internal/store/       bbolt
 internal/agentproto/  vsock wire protocol
 cmd/fastvm-agent/     fastvm-agent
@@ -753,7 +755,7 @@ loading, ADR-0001 (VMM choice), README stub.
 without KVM and reports healthy; `fastvm version`/`ls` work.
 
 ### M1 — Image build pipeline (M)
-OCI image pull → flattened rootfs → guest agent + init injection → ext4 base
+OCI image pull → flattened rootfs → ext4 base
 disk; content-addressed base-disk cache; `fastvm image pull`, `fastvm image ls`;
 test-image corpus in CI.
 **Exit:** public images pull into bootable base disks; an unchanged pull hits
@@ -953,7 +955,7 @@ A reproducible demo on one KVM host, no manual lifecycle steps:
 | Memory images contain guest secrets | Confidentiality | `0600` perms, daemon-owned dirs, host trust boundary documented; encryption v0.2 |
 | Guest clock/RNG after resume | Subtle workload bugs | `clock_realtime` on load or agent clock sync; VMGenID-capable guest kernel; documented |
 | Optional uffd mode / userfaultfd restrictions | Only affects the optional page-in mode | Not on the default path; daemon runs as root; feature-flagged; `file`/`swap`/`never` fallbacks |
-| Image pipeline complexity (ext4, kernel modules, agent injection) | Slow M1 | Pinned kernel, minimal rootfs contract, CI test images, reflink with copy fallback |
+| Image pipeline complexity (ext4, kernel modules, initramfs) | Slow M1 | Pinned kernel, minimal rootfs contract, CI test images, reflink with copy fallback |
 | Scope creep toward a platform (multi-host, k8s, ingress) | Never ships | Non-goals §4 are binding until §9 passes |
 
 ---

@@ -20,8 +20,8 @@ data_dir: /tmp/fastvm-cow/data # must be writable and large enough
 # Unix socket for the local JSON API. The daemon creates it with mode 0600.
 socket_path: /run/fastvm/fastvm.sock # absolute path; parent directory must be writable
 
-# Guest kernel image and guest agent binary injected into new base images.
-# `make assets` creates the current symlink at /tmp/fastvm/kernels/current.
+# Guest kernel image and static agent packaged into the boot initramfs.
+# Install the kernel with: fastvmctl kernel download --set-default
 kernel_path: /tmp/fastvm/kernels/current # current kernel symlink; switch with fastvmctl kernel use
 agent_path: bin/fastvm-agent # absolute or relative to daemon cwd
 
@@ -72,7 +72,7 @@ memory:
 # Writable root-disk/image storage settings.
 storage:
   cow: reflink # clone backend: reflink (XFS/Btrfs) | copy | dm-thin (not implemented)
-  root_size_gb: 8 # base/root disk GiB for new images; integer >= 1; oversized rootfs fails
+  default_image_size_gb: 2 # ext4 base image capacity; integer >= 1; oversized rootfs fails
   discard_on_destroy: true # delete writable volume with sandbox; true | false
 
 # Optional TCP JSON API with mutual TLS; the unix socket is always enabled.

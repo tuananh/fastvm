@@ -12,7 +12,7 @@ import (
 type PullSpec struct {
 	Ref       string // image reference, e.g. "nginx:alpine"
 	SizeGB    int    // base disk size; 0 = default
-	AgentPath string // guest agent binary to inject
+	AgentPath string // optional legacy agent injection; the daemon uses initramfs instead
 	InitPath  string // optional custom guest init to inject
 }
 
@@ -27,7 +27,7 @@ type IngestSpec struct {
 
 // Builder builds and stores base disks.
 type Builder interface {
-	// Pull downloads an OCI image, unpacks it, injects the guest agent/init,
+	// Pull downloads an OCI image, unpacks it, creates a base disk,
 	// and writes an ext4 base disk.
 	Pull(ctx context.Context, spec PullSpec) (types.BaseDisk, error)
 	// Ingest converts a rootfs directory into an ext4 base disk.

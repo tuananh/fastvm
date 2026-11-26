@@ -28,7 +28,7 @@ const DefaultSizeGB = 8
 
 // Guest paths where fastvm injects its runtime pieces (docs/DESIGN.md §6.5).
 const (
-	// AgentGuestPath is where the guest agent binary is injected.
+	// AgentGuestPath is the legacy guest-agent injection path.
 	AgentGuestPath = "/usr/local/bin/fastvm-agent"
 	// InitGuestPath is where the guest init script is injected.
 	InitGuestPath = "/init"
@@ -36,7 +36,8 @@ const (
 
 const (
 	// formatVersion is mixed into the content digest. Bump it whenever the
-	// disk layout or injection changes so stale caches are not reused.
+	// disk layout or optional legacy injection changes so stale caches are
+	// not reused.
 	formatVersion = 2
 
 	diskExt = ".img"
@@ -54,8 +55,8 @@ var (
 type Options struct {
 	// BaseDir stores the content-addressed base disks (<hex>.img, <hex>.json).
 	BaseDir string
-	// AgentPath is the default guest agent binary for specs that leave
-	// AgentPath empty. Empty disables agent injection.
+	// AgentPath is an optional legacy guest agent binary. Normal daemon
+	// operation leaves this empty because the agent comes from initramfs.
 	AgentPath string
 	// InitPath is an optional custom init executable. Empty uses the static
 	// agent as /init (or a minimal shell fallback when no agent is injected).
@@ -264,7 +265,8 @@ type baseDiskRequest struct {
 }
 
 // makeBaseDisk is the content-addressed pipeline shared by Ingest and Build:
-// prepare rootfs -> inject agent/init -> digest -> cache lookup -> mke2fs ->
+// prepare rootfs -> optional legacy agent/init injection -> digest -> cache
+// lookup -> mke2fs ->
 // publish disk + metadata + tag mapping.
 func (b *FSBuilder) makeBaseDisk(ctx context.Context, req baseDiskRequest) (types.BaseDisk, error) {
 	if err := ctx.Err(); err != nil {
@@ -383,7 +385,7 @@ func (b *FSBuilder) makeBaseDisk(ctx context.Context, req baseDiskRequest) (type
 	}
 	if required > sizeBytes {
 		return types.BaseDisk{}, fmt.Errorf(
-			"image rootfs requires %.1f GiB, root_size_gb=%d; increase storage.root_size_gb or use --size-gb",
+			"image rootfs requires %.1f GiB, default_image_size_gb=%d; increase storage.default_image_size_gb or use --size-gb",
 			float64(required)/(1<<30), sizeGB)
 	}
 
@@ -449,7 +451,9 @@ func (b *FSBuilder) makeBaseDisk(ctx context.Context, req baseDiskRequest) (type
 			return types.BaseDisk{}, err
 		}
 	}
-	return meta.toBaseDisk(), nil
+	disk := meta.toBaseDisk()
+	disk.AllocatedBytes = allocatedBytes(imgPath)
+	return disk, nil
 }
 
 // Remove deletes base disk ref and every tag that points at its digest.
@@ -538,7 +542,20 @@ func (b *FSBuilder) loadDisk(digestHex string) (types.BaseDisk, bool) {
 		return types.BaseDisk{}, false
 	}
 	meta.Path = imgPath
-	return meta.toBaseDisk(), true
+	disk := meta.toBaseDisk()
+	disk.AllocatedBytes = allocatedBytes(imgPath)
+	return disk, true
+}
+
+func allocatedBytes(path string) int64 {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		return int64(st.Blocks) * 512
+	}
+	return 0
 }
 
 func (b *FSBuilder) writeMeta(path string, meta diskMeta) error {

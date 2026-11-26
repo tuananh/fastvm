@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -53,14 +54,22 @@ type Options struct {
 	// DefaultCOW is the clone mode used when Create receives an empty clone
 	// argument: reflink, copy or dm-thin (default reflink).
 	DefaultCOW string
+	// ResizeFS is the resize2fs executable used when growing or shrinking a
+	// sandbox root volume. Empty uses resize2fs from PATH.
+	ResizeFS string
+	// E2fsck is the e2fsck executable used before a shrink. Empty uses e2fsck
+	// from PATH.
+	E2fsck string
 }
 
 // FSManager is the concrete volume.Manager implementation. Volumes are raw
 // ext4 files cloned from a base disk; the volume metadata sidecar records the
 // base digest, size and the clone method that was actually used.
 type FSManager struct {
-	dir        string
-	defaultCOW string
+	dir          string
+	defaultCOW   string
+	resize2fsBin string
+	e2fsckBin    string
 }
 
 var _ Manager = (*FSManager)(nil)
@@ -86,7 +95,15 @@ func NewManager(opts Options) (*FSManager, error) {
 	default:
 		return nil, fmt.Errorf("volume: invalid default COW mode %q (want reflink|copy|dm-thin)", defaultCOW)
 	}
-	return &FSManager{dir: dir, defaultCOW: defaultCOW}, nil
+	resizeBin := opts.ResizeFS
+	if resizeBin == "" {
+		resizeBin = "resize2fs"
+	}
+	e2fsckBin := opts.E2fsck
+	if e2fsckBin == "" {
+		e2fsckBin = "e2fsck"
+	}
+	return &FSManager{dir: dir, defaultCOW: defaultCOW, resize2fsBin: resizeBin, e2fsckBin: e2fsckBin}, nil
 }
 
 // Create clones base into <VolDir>/<sandboxID>.img.
@@ -94,9 +111,10 @@ func NewManager(opts Options) (*FSManager, error) {
 // With clone == "" the configured DefaultCOW is used. reflink attempts the
 // FICLONE ioctl and transparently falls back to a sparse copy on filesystems
 // without reflink support (e.g. ext4); the returned Volume.COW reports the
-// method that was actually used. The volume size always equals the base disk
-// size (sizeGB, when non-zero, must match it). Create is idempotent: an
-// existing compatible volume is returned unchanged.
+// method that was actually used. sizeGB may be smaller or larger than the base
+// image; the clone is shrunk with e2fsck+resize2fs or grown with resize2fs
+// offline before it is published.
+// Create is idempotent: an existing compatible volume is returned unchanged.
 func (m *FSManager) Create(ctx context.Context, sandboxID string, base types.BaseDisk, sizeGB int, clone string) (Volume, error) {
 	if err := ctx.Err(); err != nil {
 		return Volume{}, err
@@ -131,10 +149,7 @@ func (m *FSManager) Create(ctx context.Context, sandboxID string, base types.Bas
 		if int64(sizeGB) > math.MaxInt64>>30 {
 			return Volume{}, fmt.Errorf("%w: size_gb %d is too large", ErrSizeMismatch, sizeGB)
 		}
-		if want := int64(sizeGB) << 30; want != baseSize {
-			return Volume{}, fmt.Errorf("%w: requested %d GiB (%d bytes) but base disk is %d bytes",
-				ErrSizeMismatch, sizeGB, want, baseSize)
-		}
+		expected = int64(sizeGB) << 30
 	}
 
 	mode := clone
@@ -184,7 +199,12 @@ func (m *FSManager) Create(ctx context.Context, sandboxID string, base types.Bas
 		}
 	}()
 
-	method, err := cloneInto(ctx, mode, base.Path, tmpFile, expected)
+	cloneSize := expected
+	if expected < baseSize {
+		// Shrink after cloning: truncating first would discard filesystem data.
+		cloneSize = baseSize
+	}
+	method, err := cloneInto(ctx, mode, base.Path, tmpFile, cloneSize)
 	if err != nil {
 		return Volume{}, err
 	}
@@ -196,6 +216,33 @@ func (m *FSManager) Create(ctx context.Context, sandboxID string, base types.Bas
 	}
 	if err := tmpFile.Close(); err != nil {
 		return Volume{}, fmt.Errorf("volume: close volume: %w", err)
+	}
+	if expected != baseSize {
+		if expected < baseSize {
+			cmd := exec.CommandContext(ctx, m.e2fsckBin, "-f", "-y", tmpPath)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				var exitErr *exec.ExitError
+				if !errors.As(err, &exitErr) || exitErr.ExitCode() > 1 {
+					return Volume{}, fmt.Errorf("volume: e2fsck before shrink: %w: %s",
+						err, strings.TrimSpace(string(output)))
+				}
+			}
+			cmd = exec.CommandContext(ctx, m.resize2fsBin, tmpPath, fmt.Sprintf("%dG", sizeGB))
+			if output, err := cmd.CombinedOutput(); err != nil {
+				return Volume{}, fmt.Errorf("volume: shrink %s to %d GiB: %w: %s",
+					tmpPath, sizeGB, err, strings.TrimSpace(string(output)))
+			}
+			if err := os.Truncate(tmpPath, expected); err != nil {
+				return Volume{}, fmt.Errorf("volume: truncate shrunk volume: %w", err)
+			}
+		} else {
+			cmd := exec.CommandContext(ctx, m.resize2fsBin, tmpPath)
+			if output, err := cmd.CombinedOutput(); err != nil {
+				return Volume{}, fmt.Errorf("volume: resize %s to %d bytes: %w: %s",
+					tmpPath, expected, err, strings.TrimSpace(string(output)))
+			}
+		}
 	}
 	if err := os.Rename(tmpPath, target); err != nil {
 		return Volume{}, fmt.Errorf("volume: publish volume: %w", err)

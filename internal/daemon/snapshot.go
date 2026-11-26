@@ -29,6 +29,7 @@ type SnapshotMeta struct {
 	ImageDigest    string    `json:"image_digest"`
 	Kernel         string    `json:"kernel,omitempty"`
 	KernelPath     string    `json:"kernel_path,omitempty"`
+	RootSizeGB     int       `json:"root_size_gb,omitempty"`
 	VCPUs          int       `json:"vcpus"`
 	MaxVCPUs       int       `json:"max_vcpus,omitempty"`
 	MemoryMB       int       `json:"memory_mb"`
@@ -211,7 +212,8 @@ func (d *Daemon) snapshotLocked(ctx context.Context, rt *runtime, outDir string)
 	meta := SnapshotMeta{
 		Version: snapshotVersion, ImageDigest: sb.BaseDisk,
 		Kernel: sb.Kernel, KernelPath: sb.KernelPath,
-		VCPUs: sb.VCPUs, MaxVCPUs: sb.MaxVCPUs, MemoryMB: sb.MemoryMB, MaxMemoryMB: sb.MaxMemoryMB,
+		RootSizeGB: sb.RootSizeGB,
+		VCPUs:      sb.VCPUs, MaxVCPUs: sb.MaxVCPUs, MemoryMB: sb.MemoryMB, MaxMemoryMB: sb.MaxMemoryMB,
 		Workdir:        sb.Workdir,
 		NetworkEnabled: sb.NetworkEnabled, AllowHosts: sb.AllowHosts,
 		VsockCID: guestCID(sb.IP), CreatedAt: d.now(),
@@ -287,7 +289,8 @@ func (d *Daemon) createFromSnapshot(ctx context.Context, opts manager.CreateOpti
 	}
 	sb := types.Sandbox{
 		ID: id, Name: name, BaseDisk: base.Digest, Kernel: meta.Kernel, KernelPath: kernelPath,
-		VCPUs: meta.VCPUs, MaxVCPUs: defaultMax(meta.MaxVCPUs, meta.VCPUs),
+		RootSizeGB: meta.RootSizeGB,
+		VCPUs:      meta.VCPUs, MaxVCPUs: defaultMax(meta.MaxVCPUs, meta.VCPUs),
 		MemoryMB: meta.MemoryMB, MaxMemoryMB: defaultMax(meta.MaxMemoryMB, meta.MemoryMB),
 		Workdir: meta.Workdir,
 		State:   types.StateStarting, NetworkEnabled: meta.NetworkEnabled,

@@ -89,6 +89,7 @@ export const baseDiskSchema = z
     tags: z.array(z.string()).optional(),
     digest: z.string(),
     size_bytes: z.number().int(),
+    allocated_bytes: z.number().int().optional(),
     source: z.string(),
     created_at: z.string(),
   })

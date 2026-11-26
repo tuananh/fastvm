@@ -798,7 +798,7 @@ func TestIngestRejectsOversizedRootfs(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected oversized rootfs to fail")
 	}
-	if !strings.Contains(err.Error(), "root_size_gb=1") || !strings.Contains(err.Error(), "requires") {
+	if !strings.Contains(err.Error(), "default_image_size_gb=1") || !strings.Contains(err.Error(), "requires") {
 		t.Fatalf("error = %v", err)
 	}
 }

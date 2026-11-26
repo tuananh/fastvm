@@ -26,9 +26,10 @@ The top-level [README](../README.md) has the project overview and quickstart.
 ```
 cmd/fastvm/            CLI client
 cmd/fastvmd/           daemon
-cmd/fastvm-agent/      guest agent (static, injected into base disks)
+cmd/fastvm-agent/      guest agent (static, packaged in the boot initramfs)
 internal/api/          HTTP/JSON API
 internal/image/       OCI registry pull → rootfs → ext4 base disk
+internal/initramfs/   static-agent CPIO initramfs builder
 internal/volume/       CoW runtime volumes
 internal/kernel/       guest kernel inventory and verified downloads
 internal/vmm/          VMM interface; cloudhypervisor/ driver

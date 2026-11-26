@@ -14,6 +14,7 @@ type CreateOptions struct {
 	Name        string
 	Image       string // base disk tag or digest
 	Kernel      string // optional installed kernel release for this sandbox
+	RootSizeGB  int    // per-sandbox writable root size; 0 uses the base image size
 	VCPUs       int
 	MaxVCPUs    int
 	MemoryMB    int

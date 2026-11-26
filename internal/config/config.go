@@ -40,8 +40,8 @@ type Config struct {
 	DataDir    string  `yaml:"data_dir"`
 	SocketPath string  `yaml:"socket_path"`
 	KernelPath string  `yaml:"kernel_path"`
-	AgentPath  string  `yaml:"agent_path"` // guest agent binary injected into base disks
-	InitPath   string  `yaml:"init_path"`  // optional host path to init script injected into base disks
+	AgentPath  string  `yaml:"agent_path"` // static guest agent packaged into the boot initramfs
+	InitPath   string  `yaml:"init_path"`  // fallback custom init for non-initramfs images
 	Network    Network `yaml:"network"`
 	API        API     `yaml:"api"`
 
@@ -106,9 +106,9 @@ type WakePolicy struct {
 
 // Storage configures sandbox writable storage.
 type Storage struct {
-	COW              string `yaml:"cow"` // reflink|dm-thin|copy
-	RootSizeGB       int    `yaml:"root_size_gb"`
-	DiscardOnDestroy bool   `yaml:"discard_on_destroy"`
+	COW                string `yaml:"cow"`                   // reflink|dm-thin|copy
+	DefaultImageSizeGB int    `yaml:"default_image_size_gb"` // image build size unless --size-gb overrides
+	DiscardOnDestroy   bool   `yaml:"discard_on_destroy"`
 }
 
 // VMMConfig selects the VMM backend executables.
@@ -179,7 +179,7 @@ func Default() *Config {
 		},
 		Network:  Network{DataPath: DataPath{Mode: "ebpf", IsolateSandboxes: true, WakeNotify: true}},
 		Memory:   Memory{OffloadMode: "file", EvictAbove: 0.90, ReserveMB: 1024},
-		Storage:  Storage{COW: "reflink", RootSizeGB: 8, DiscardOnDestroy: true},
+		Storage:  Storage{COW: "reflink", DefaultImageSizeGB: 8, DiscardOnDestroy: true},
 		VMM:      VMMConfig{Binary: "cloud-hypervisor", Virtiofsd: "virtiofsd"},
 		Defaults: Defaults{VCPUs: 2, MemoryMB: 512},
 	}

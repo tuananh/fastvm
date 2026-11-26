@@ -85,7 +85,7 @@ func TestValidateDataVolumes(t *testing.T) {
 
 func TestPullImageUsesStorageSize(t *testing.T) {
 	h := newHarness(t)
-	h.d.cfg.Storage.RootSizeGB = 2
+	h.d.cfg.Storage.DefaultImageSizeGB = 2
 	if _, err := h.d.PullImage(context.Background(), manager.PullOptions{Ref: "alpine"}); err != nil {
 		t.Fatal(err)
 	}

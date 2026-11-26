@@ -45,7 +45,7 @@ memory:
   offload_mode: never
 storage:
   cow: copy
-  root_size_gb: 2
+  default_image_size_gb: 2
 host_volumes:
   allowed_prefixes: [/tmp]
 network:
@@ -68,7 +68,7 @@ defaults:
 	if c.Lifecycle.IdleDetection.SampleInterval.D() != 250*time.Millisecond || c.Lifecycle.IdleDetection.BlockIOBytes != 4096 {
 		t.Fatalf("idle override = %+v", c.Lifecycle.IdleDetection)
 	}
-	if c.Memory.OffloadMode != "never" || c.Storage.COW != "copy" || c.Storage.RootSizeGB != 2 || c.Network.DataPath.Mode != "bridge" {
+	if c.Memory.OffloadMode != "never" || c.Storage.COW != "copy" || c.Storage.DefaultImageSizeGB != 2 || c.Network.DataPath.Mode != "bridge" {
 		t.Fatalf("modes = %+v", c)
 	}
 	if len(c.Lifecycle.IdleDetection.IgnorePorts) != 1 || c.Lifecycle.IdleDetection.IgnorePorts[0] != 8081 {

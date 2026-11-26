@@ -188,7 +188,9 @@ export default function ImagesPage({
                       {shortDigest(image.digest, 20)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-gray-300">
-                      {formatBytes(image.size_bytes)}
+                      <span title={`${formatBytes(image.size_bytes)} virtual disk`}>
+                        {formatBytes(image.allocated_bytes ?? image.size_bytes)} used
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{image.source}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-gray-300">

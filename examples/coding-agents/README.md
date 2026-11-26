@@ -4,7 +4,7 @@ Disposable coding-agent environments built from `node:26-slim`. Each example
 installs its CLI on first boot and keeps the sandbox awake.
 
 The agent installs and Codex session data need more than the demo's old 1 GiB
-image. Keep `storage.root_size_gb: 8` (or pull the image with `--size-gb 8`)
+image. Keep `storage.default_image_size_gb: 8` (or pull the image with `--size-gb 8`)
 and re-pull the image after changing the size.
 
 ```sh

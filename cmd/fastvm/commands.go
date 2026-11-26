@@ -105,7 +105,7 @@ func newImageListCmd() *cobra.Command {
 				return err
 			}
 			tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-			fmt.Fprintln(tw, "TAG\tDIGEST\tSIZE\tSOURCE")
+			fmt.Fprintln(tw, "TAG\tDIGEST\tSIZE\tUSED\tSOURCE")
 			for _, d := range disks {
 				tag := "-"
 				if len(d.Tags) > 0 {
@@ -113,7 +113,12 @@ func newImageListCmd() *cobra.Command {
 				} else if d.Tag != "" {
 					tag = d.Tag
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%d MiB\t%s\n", tag, short(d.Digest), d.SizeBytes/(1<<20), d.Source)
+				used := "-"
+				if d.AllocatedBytes > 0 {
+					used = fmt.Sprintf("%d MiB", d.AllocatedBytes/(1<<20))
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%d MiB\t%s\t%s\n",
+					tag, short(d.Digest), d.SizeBytes/(1<<20), used, d.Source)
 			}
 			return tw.Flush()
 		},
@@ -185,7 +190,7 @@ func (o *networkOptions) validate(cmdName string) error {
 
 func newRunCmd() *cobra.Command {
 	var image, name, file, fromSnapshot, entrypoint, workdir, kernelRef string
-	var vcpus, maxVCPUs, memory, maxMemory int
+	var vcpus, maxVCPUs, memory, maxMemory, rootSizeGB int
 	var publishes, envs, volumes []string
 	var userData string
 	var detach, noStart bool
@@ -220,7 +225,9 @@ block data volume (size=8GiB,mount=/data). Data volumes are cloned from a blank
 ext4 template and disable automatic sleep and snapshots.
 
 --max-cpu/--max-memory set hotplug ceilings; they default to --cpu/--memory.
-Cloud Hypervisor exposes the balloon device by default.`,
+--root-size-gb sets the writable sandbox root disk independently of the image
+size; the base image is cloned and grown on the host. Cloud Hypervisor exposes
+the balloon device by default.`,
 		Example: `  fastvmctl run --net --image alpine -- uname -a
   fastvmctl run --net -it --image alpine -- /bin/sh
   fastvmctl run -f examples/coding-agents/codex.fvmfile
@@ -231,6 +238,7 @@ Cloud Hypervisor exposes the balloon device by default.`,
   fastvmctl run --from-snapshot original-vm-20261119-182000 --name copy-1
   fastvmctl run --image alpine --kernel ch-release-v7.2.8-20261009 -- uname -a
   fastvmctl run --image alpine --cpu 1 --max-cpu 4 --memory 128 --max-memory 1024
+  fastvmctl run --image node:26-slim --root-size-gb 32
   fastvmctl run --name agent`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cobraCmd *cobra.Command, cmdArgs []string) error {
@@ -248,7 +256,7 @@ Cloud Hypervisor exposes the balloon device by default.`,
 				if file != "" || cobraCmd.Flags().Changed("image") {
 					return errors.New("--from-snapshot cannot be combined with --image or --file")
 				}
-				for _, flagName := range []string{"cpu", "max-cpu", "memory", "max-memory", "publish", "env", "volume", "net", "no-net", "allow-host", "auto-publish", "no-auto-sleep", "entrypoint", "workdir"} {
+				for _, flagName := range []string{"cpu", "max-cpu", "memory", "max-memory", "root-size-gb", "publish", "env", "volume", "net", "no-net", "allow-host", "auto-publish", "no-auto-sleep", "entrypoint", "workdir"} {
 					if cobraCmd.Flags().Changed(flagName) {
 						return fmt.Errorf("--%s does not apply with --from-snapshot", flagName)
 					}
@@ -421,10 +429,14 @@ Cloud Hypervisor exposes the balloon device by default.`,
 			if maxVCPUs < vcpus || maxMemory < memory {
 				return errors.New("--max-cpu/--max-memory must be >= --cpu/--memory")
 			}
+			if cmdFlagChanged(cobraCmd, "root-size-gb") && rootSizeGB < 1 {
+				return errors.New("--root-size-gb must be at least 1")
+			}
 			body := map[string]any{
 				"name": name, "image": image, "kernel": kernelRef, "workdir": workdir,
 				"vcpus": vcpus, "max_vcpus": maxVCPUs, "memory_mb": memory, "max_memory_mb": maxMemory,
-				"ports": ports, "volumes": vols, "data_volumes": dataVols, "cmd": workload, "env": env,
+				"root_size_gb": rootSizeGB,
+				"ports":        ports, "volumes": vols, "data_volumes": dataVols, "cmd": workload, "env": env,
 				"no_auto_sleep": noAutoSleep, "start": !noStart,
 				"network_enabled": opts.enabled(), "allow_hosts": opts.allowHosts,
 				"user_data": userData, "auto_publish": opts.autoPublish,
@@ -463,6 +475,7 @@ Cloud Hypervisor exposes the balloon device by default.`,
 	f.IntVar(&maxVCPUs, "max-cpu", 0, "maximum vCPUs for hotplug (default: --cpu)")
 	f.IntVar(&memory, "memory", 128, "boot memory MiB")
 	f.IntVar(&maxMemory, "max-memory", 0, "maximum memory MiB for hotplug (default: --memory)")
+	f.IntVar(&rootSizeGB, "root-size-gb", 0, "writable root disk size in GiB (default: image size)")
 	f.StringArrayVar(&publishes, "publish", nil, "publish a port host:guest[/tcp|udp]")
 	f.StringArrayVar(&envs, "env", nil, "workload env K=V")
 	f.StringArrayVarP(&volumes, "volume", "v", nil, "mount a host directory (host[:guest][:ro]) or data volume (size=8GiB,mount=/data)")
@@ -595,6 +608,10 @@ func mergeDataVolumes(base, extra []types.DataVolume) []types.DataVolume {
 
 // mergeVolumes appends CLI volumes, replacing file volumes with the same
 // guest path so an explicit flag wins.
+func cmdFlagChanged(cmd *cobra.Command, name string) bool {
+	return cmd.Flags().Changed(name)
+}
+
 func mergeVolumes(base, extra []types.Volume) []types.Volume {
 	out := append([]types.Volume(nil), base...)
 	index := make(map[string]int, len(out))

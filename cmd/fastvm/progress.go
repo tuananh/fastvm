@@ -71,7 +71,7 @@ func (m imagePullModel) View() tea.View {
 	return tea.NewView(fmt.Sprintf(
 		"%s Pulling image %s\n\n"+
 			"  This can take a while on the first pull:\n"+
-			"  pull → unpack rootfs → inject agent → create ext4 disk\n\n"+
+			"  pull → unpack rootfs → create ext4 disk\n\n"+
 			"  elapsed %s",
 		m.spinner.View(),
 		m.ref,
