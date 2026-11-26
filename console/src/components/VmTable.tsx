@@ -1,7 +1,5 @@
-import { useQueries } from "@tanstack/react-query";
 import { useState } from "react";
-import { getSandboxStats } from "../lib/api";
-import { queryKeys } from "../lib/queries";
+import { useAllSandboxStats } from "../lib/queries";
 import type { BaseDisk, Sandbox, SandboxState } from "../lib/types";
 import { Button, Input, Select, Spinner, cn } from "../ui";
 import {
@@ -105,18 +103,8 @@ export function VmTable({
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState<SandboxState | "all">("all");
 
-  const statsQueries = useQueries({
-    queries: sandboxes.map((sandbox) => ({
-      queryKey: queryKeys.sandboxStats(sandbox.id),
-      queryFn: () => getSandboxStats(sandbox.id),
-      refetchInterval: 2_000,
-      retry: 0,
-    })),
-  });
-
-  const statsByRef = new Map(
-    sandboxes.map((sandbox, index) => [sandbox.id, statsQueries[index]] as const),
-  );
+  const statsQuery = useAllSandboxStats();
+  const statsById = new Map((statsQuery.data ?? []).map((stats) => [stats.sandbox_id, stats]));
   const imagesByDigest = new Map(images.map((image) => [image.digest, image] as const));
   const needle = query.trim().toLowerCase();
   const filtered = sandboxes.filter((sandbox) => {
@@ -316,10 +304,9 @@ export function VmTable({
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {visible.map((sandbox) => {
-                const statsQuery = statsByRef.get(sandbox.id);
-                const stats = statsQuery?.data;
-                const statsPending = statsQuery === undefined || statsQuery.isPending;
-                const statsFailed = statsQuery?.isError === true;
+                const stats = statsById.get(sandbox.id);
+                const statsPending = statsQuery.isPending;
+                const statsFailed = statsQuery.isError;
                 const cpuPercent = stats === undefined ? 0 : clampPercent(stats.cpu_percent);
                 const memoryLimitBytes =
                   (stats !== undefined && stats.memory_mb > 0

@@ -667,6 +667,23 @@ func (d *Daemon) Stats(ctx context.Context, ref string) (types.SandboxStats, err
 	if err != nil {
 		return types.SandboxStats{}, err
 	}
+	return d.statsFor(sb), nil
+}
+
+// StatsAll returns cached utilization for every sandbox in one store scan.
+func (d *Daemon) StatsAll(ctx context.Context) ([]types.SandboxStats, error) {
+	list, err := d.st.ListSandboxes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]types.SandboxStats, 0, len(list))
+	for _, sb := range list {
+		out = append(out, d.statsFor(*sb))
+	}
+	return out, nil
+}
+
+func (d *Daemon) statsFor(sb types.Sandbox) types.SandboxStats {
 	out := types.SandboxStats{
 		SandboxID: sb.ID, Name: sb.Name, State: sb.State,
 		VCPUs: sb.VCPUs, MemoryMB: sb.MemoryMB, WakeCount: sb.WakeCount,
@@ -677,7 +694,7 @@ func (d *Daemon) Stats(ctx context.Context, ref string) (types.SandboxStats, err
 	}
 	rt := d.lookupRuntime(sb.ID)
 	if rt == nil {
-		return out, nil
+		return out
 	}
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
@@ -707,7 +724,7 @@ func (d *Daemon) Stats(ctx context.Context, ref string) (types.SandboxStats, err
 	if !rt.statsAt.IsZero() {
 		out.CapturedAt = rt.statsAt
 	}
-	return out, nil
+	return out
 }
 
 func (d *Daemon) List(ctx context.Context) ([]types.Sandbox, error) {
@@ -755,9 +772,8 @@ func (d *Daemon) Exec(ctx context.Context, ref string, argv []string, env map[st
 	if err != nil {
 		return agent.Response{}, err
 	}
-	if err := d.persistLocked(ctx, rt, sb); err != nil {
-		return resp, err
-	}
+	// ExecCount and activity are kept in memory; state transitions persist the
+	// full record. Avoid a bbolt fsync on every interactive command.
 	return resp, nil
 }
 

@@ -277,11 +277,22 @@ func overwriteFile(path string, data []byte, perm fs.FileMode) error {
 // and regular-file bytes. Timestamps and ownership are excluded because
 // mke2fs -d derives its own inode metadata.
 func manifestDigest(rootfs string, sizeGB int) (string, error) {
+	digest, _, err := manifestDigestAndRequired(rootfs, sizeGB)
+	return digest, err
+}
+
+// manifestDigestAndRequired computes the content digest and ext4 capacity in a
+// single rootfs walk. The capacity uses the larger of logical and allocated size
+// per file (safe for sparse files), counts inodes once, and leaves headroom for
+// ext4 metadata and journal.
+func manifestDigestAndRequired(rootfs string, sizeGB int) (string, int64, error) {
 	h := sha256.New()
 	writeFieldString(h, "fastvm-base-disk")
 	writeFieldUint64(h, formatVersion)
 	writeFieldUint64(h, uint64(sizeGB))
 
+	seen := make(map[inodeKey]struct{})
+	var dataBytes, inodes int64
 	buf := make([]byte, 1<<20)
 	err := filepath.WalkDir(rootfs, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -300,6 +311,32 @@ func manifestDigest(rootfs string, sizeGB int) (string, error) {
 			return fmt.Errorf("image: stat %q: %w", path, err)
 		}
 		mode := info.Mode()
+
+		if mode.IsDir() {
+			inodes++
+		} else {
+			key := inodeKey{}
+			if st, ok := info.Sys().(*syscall.Stat_t); ok {
+				key = inodeKey{dev: uint64(st.Dev), ino: st.Ino}
+				if _, dup := seen[key]; dup {
+					return nil
+				}
+				seen[key] = struct{}{}
+			}
+			inodes++
+			if mode.IsRegular() {
+				size := info.Size()
+				if key != (inodeKey{}) {
+					if st, ok := info.Sys().(*syscall.Stat_t); ok {
+						if allocated := int64(st.Blocks) * 512; allocated > size {
+							size = allocated
+						}
+					}
+				}
+				dataBytes += size
+			}
+		}
+
 		switch {
 		case mode.IsDir():
 			writeFieldString(h, "dir")
@@ -337,9 +374,15 @@ func manifestDigest(rootfs string, sizeGB int) (string, error) {
 		return nil
 	})
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	required := dataBytes + inodes*256 + dataBytes/10 + (256 << 20)
+	return hex.EncodeToString(h.Sum(nil)), required, nil
+}
+
+type inodeKey struct {
+	dev uint64
+	ino uint64
 }
 
 func writeFieldString(h hash.Hash, s string) { writeFieldBytes(h, []byte(s)) }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -63,6 +64,11 @@ func (f *fakeRT) Resize(_ context.Context, ref string, opts manager.ResizeOption
 func (f *fakeRT) Stats(context.Context, string) (types.SandboxStats, error) {
 	return f.stats, f.err
 }
+
+func (f *fakeRT) StatsAll(context.Context) ([]types.SandboxStats, error) {
+	return []types.SandboxStats{f.stats}, f.err
+}
+
 func (f *fakeRT) List(context.Context) ([]types.Sandbox, error) {
 	return []types.Sandbox{f.sb}, f.err
 }
@@ -211,6 +217,16 @@ func TestSandboxStats(t *testing.T) {
 	if code != 404 || !bytes.Contains(body, []byte(`"not_found"`)) {
 		t.Fatalf("missing stats code=%d body=%s", code, body)
 	}
+
+	rt.err = nil
+	code, body = call(t, ts, "GET", "/v1/sandboxes/stats", nil)
+	if code != 200 {
+		t.Fatalf("all stats code=%d body=%s", code, body)
+	}
+	var all []types.SandboxStats
+	if err := json.Unmarshal(body, &all); err != nil || len(all) != 1 || all[0].SandboxID != "sb-1" {
+		t.Fatalf("all stats body=%s err=%v", body, err)
+	}
 }
 
 func TestCreateAndDelete(t *testing.T) {
@@ -326,4 +342,28 @@ func TestServeUnixSocket(t *testing.T) {
 	}
 	dir := t.TempDir()
 	_ = dir
+}
+
+func TestGzipResponses(t *testing.T) {
+	ts, _, _ := server(t)
+	req, err := http.NewRequest("GET", ts.URL+"/v1/sandboxes", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.Header.Get("Content-Encoding") != "gzip" {
+		t.Fatalf("Content-Encoding = %q", resp.Header.Get("Content-Encoding"))
+	}
+	zr, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadAll(zr); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -358,7 +358,7 @@ func (b *FSBuilder) makeBaseDisk(ctx context.Context, req baseDiskRequest) (type
 		return types.BaseDisk{}, err
 	}
 
-	digestHex, err := manifestDigest(rootfs, sizeGB)
+	digestHex, required, err := manifestDigestAndRequired(rootfs, sizeGB)
 	if err != nil {
 		return types.BaseDisk{}, err
 	}
@@ -379,10 +379,6 @@ func (b *FSBuilder) makeBaseDisk(ctx context.Context, req baseDiskRequest) (type
 		return disk, nil
 	}
 
-	required, err := rootfsRequiredBytes(rootfs)
-	if err != nil {
-		return types.BaseDisk{}, err
-	}
 	if required > sizeBytes {
 		return types.BaseDisk{}, fmt.Errorf(
 			"image rootfs requires %.1f GiB, default_image_size_gb=%d; increase storage.default_image_size_gb or use --size-gb",

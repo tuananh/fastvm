@@ -59,6 +59,7 @@ type Runtime interface {
 	RemoveSnapshot(ctx context.Context, name string) error
 	Get(ctx context.Context, ref string) (types.Sandbox, error)
 	Stats(ctx context.Context, ref string) (types.SandboxStats, error)
+	StatsAll(ctx context.Context) ([]types.SandboxStats, error)
 	List(ctx context.Context) ([]types.Sandbox, error)
 	Exec(ctx context.Context, ref string, argv []string, env map[string]string) (agent.Response, error)
 	Sleep(ctx context.Context, ref string, deep bool) error

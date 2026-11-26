@@ -83,6 +83,9 @@ beforeEach(() => {
     if (url.includes("/v1/images")) {
       return fakeResponse(IMAGES);
     }
+    if (url.endsWith("/v1/sandboxes/stats")) {
+      return fakeResponse([STATS]);
+    }
     if (url.includes("/stats")) {
       return fakeResponse(STATS);
     }

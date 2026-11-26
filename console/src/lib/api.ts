@@ -188,6 +188,11 @@ export function getSandboxStats(ref: string): Promise<SandboxStats> {
   return request(`${sandboxPath(ref)}/stats`, {}, sandboxStatsSchema);
 }
 
+/** `GET /v1/sandboxes/stats` */
+export function getAllSandboxStats(): Promise<SandboxStats[]> {
+  return request(`${API_PREFIX}/sandboxes/stats`, {}, z.array(sandboxStatsSchema));
+}
+
 /** `GET /v1/kernels` */
 export function listKernels(): Promise<KernelList> {
   return request(`${API_PREFIX}/kernels`, {}, kernelListSchema);

@@ -651,14 +651,14 @@ func TestConsoleLogReadsHostSerial(t *testing.T) {
 	if err := os.WriteFile(sb.SerialPath, []byte("boot log line\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	data, err := h.d.ConsoleLog(context.Background(), sb.ID)
+	data, err := h.d.ConsoleLog(context.Background(), sb.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(data) != "boot log line\n" {
 		t.Fatalf("console log = %q", data)
 	}
-	if _, err := h.d.ConsoleLog(context.Background(), "missing"); !errors.Is(err, manager.ErrNotFound) {
+	if _, err := h.d.ConsoleLog(context.Background(), "missing", 0); !errors.Is(err, manager.ErrNotFound) {
 		t.Fatalf("missing console error = %v", err)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,33 +63,29 @@ func runLogs(ctx context.Context, ref string, sources []string, follow bool) err
 
 	for {
 		for _, source := range sources {
-			data, err := fetchLogSource(ctx, ref, source, seen)
+			chunk, err := fetchLogSource(ctx, ref, source, seen, offsets[source])
 			if err != nil {
 				return err
 			}
 			if source == "system" {
 				// System output is already deduplicated by event key.
-				if len(data) > 0 {
+				if len(chunk.data) > 0 {
 					if first && len(sources) > 1 {
 						fmt.Fprintf(os.Stdout, "==> %s <==\n", source)
 					}
-					_, _ = os.Stdout.Write(data)
+					_, _ = os.Stdout.Write(chunk.data)
 				}
 				continue
 			}
-			off := offsets[source]
-			if len(data) < int(off) {
-				off = 0 // file was rotated or truncated
-			}
-			if len(data) > int(off) {
+			if len(chunk.data) > 0 {
 				if first && len(sources) > 1 {
 					fmt.Fprintf(os.Stdout, "==> %s <==\n", source)
 				}
-				if _, err := os.Stdout.Write(data[off:]); err != nil {
+				if _, err := os.Stdout.Write(chunk.data); err != nil {
 					return err
 				}
-				offsets[source] = int64(len(data))
 			}
+			offsets[source] = chunk.size
 		}
 		first = false
 		if !follow {
@@ -102,57 +99,90 @@ func runLogs(ctx context.Context, ref string, sources []string, follow bool) err
 	}
 }
 
-func fetchLogSource(ctx context.Context, ref, source string, seen map[string]bool) ([]byte, error) {
+type logChunk struct {
+	data []byte
+	size int64
+}
+
+func fetchLogSource(ctx context.Context, ref, source string, seen map[string]bool, offset int64) (logChunk, error) {
 	switch source {
 	case "stdout":
-		return fetchGuestLog(ctx, ref, guestStdoutLog)
+		return fetchGuestLog(ctx, ref, guestStdoutLog, offset)
 	case "stderr":
-		return fetchGuestLog(ctx, ref, guestStderrLog)
+		return fetchGuestLog(ctx, ref, guestStderrLog, offset)
 	case "console":
-		return fetchConsoleLog(ctx, ref)
+		return fetchConsoleLog(ctx, ref, offset)
 	case "system":
-		return fetchSystemLog(ctx, ref, seen)
+		data, err := fetchSystemLog(ctx, ref, seen)
+		return logChunk{data: data, size: int64(len(data))}, err
 	case "output":
-		return nil, errors.New("logs: PTY output is not persisted because it contains terminal input echo")
+		return logChunk{}, errors.New("logs: PTY output is not persisted because it contains terminal input echo")
 	default:
-		return nil, fmt.Errorf("logs: unknown source %q", source)
+		return logChunk{}, fmt.Errorf("logs: unknown source %q", source)
 	}
 }
 
-func fetchGuestLog(ctx context.Context, ref, path string) ([]byte, error) {
+func fetchGuestLog(ctx context.Context, ref, path string, offset int64) (logChunk, error) {
 	q := url.Values{}
 	q.Set("path", path)
+	if offset > 0 {
+		q.Set("offset", strconv.FormatInt(offset, 10))
+	}
 	resp, err := rawAPIRequest(ctx, http.MethodGet, "/v1/sandboxes/"+url.PathEscape(ref)+"/file?"+q.Encode(), nil)
 	if err != nil {
-		return nil, err
+		return logChunk{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
+		return logChunk{}, nil
 	}
 	if resp.StatusCode >= 300 {
 		err := copyResponseError(resp)
 		if strings.Contains(strings.ToLower(err.Error()), "no such file or directory") {
-			return nil, nil
+			return logChunk{}, nil
 		}
-		return nil, err
+		return logChunk{}, err
 	}
-	return io.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return logChunk{}, err
+	}
+	size := offset + int64(len(data))
+	if raw := resp.Header.Get("X-Fastvm-Size"); raw != "" {
+		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			size = parsed
+		}
+	}
+	return logChunk{data: data, size: size}, nil
 }
 
-func fetchConsoleLog(ctx context.Context, ref string) ([]byte, error) {
-	resp, err := rawAPIRequest(ctx, http.MethodGet, "/v1/sandboxes/"+url.PathEscape(ref)+"/console", nil)
+func fetchConsoleLog(ctx context.Context, ref string, offset int64) (logChunk, error) {
+	path := "/v1/sandboxes/" + url.PathEscape(ref) + "/console"
+	if offset > 0 {
+		path += "?offset=" + strconv.FormatInt(offset, 10)
+	}
+	resp, err := rawAPIRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		return nil, err
+		return logChunk{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
+		return logChunk{}, nil
 	}
 	if resp.StatusCode >= 300 {
-		return nil, copyResponseError(resp)
+		return logChunk{}, copyResponseError(resp)
 	}
-	return io.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return logChunk{}, err
+	}
+	size := offset + int64(len(data))
+	if raw := resp.Header.Get("X-Fastvm-Size"); raw != "" {
+		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			size = parsed
+		}
+	}
+	return logChunk{data: data, size: size}, nil
 }
 
 func fetchSystemLog(ctx context.Context, ref string, seen map[string]bool) ([]byte, error) {

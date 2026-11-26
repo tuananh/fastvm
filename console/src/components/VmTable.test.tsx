@@ -7,6 +7,9 @@ import { VmTable } from "./VmTable";
 // The table intentionally renders even when live stats are unavailable; keep
 // the test offline instead of touching the daemon.
 vi.mock("../lib/api", () => ({
+  getAllSandboxStats: vi.fn(async () => {
+    throw new Error("offline");
+  }),
   getSandboxStats: vi.fn(async () => {
     throw new Error("offline");
   }),

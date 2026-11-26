@@ -4,6 +4,7 @@ import {
   createSandbox,
   deleteSandbox,
   getSandbox,
+  getAllSandboxStats,
   getSandboxLog,
   getSandboxStats,
   getVersion,
@@ -24,6 +25,7 @@ export const queryKeys = {
   sandboxes: ["sandboxes"] as const,
   sandbox: (ref: string) => ["sandbox", ref] as const,
   sandboxStats: (ref: string) => ["sandbox-stats", ref] as const,
+  sandboxStatsAll: ["sandbox-stats-all"] as const,
   sandboxLogs: (ref: string, source: SandboxLogSource) => ["sandbox-logs", ref, source] as const,
   images: ["images"] as const,
   kernels: ["kernels"] as const,
@@ -92,6 +94,15 @@ export function useKernels() {
     queryKey: queryKeys.kernels,
     queryFn: listKernels,
     staleTime: 60_000,
+  });
+}
+
+/** Cached utilization for all sandboxes, polled every 2s. */
+export function useAllSandboxStats() {
+  return useQuery({
+    queryKey: queryKeys.sandboxStatsAll,
+    queryFn: getAllSandboxStats,
+    refetchInterval: 2_000,
   });
 }
 

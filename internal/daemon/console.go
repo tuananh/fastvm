@@ -11,7 +11,7 @@ import (
 
 // ConsoleLog returns the raw serial-console output captured on the host. It
 // works without the guest agent, so it is useful for boot failures.
-func (d *Daemon) ConsoleLog(ctx context.Context, ref string) ([]byte, error) {
+func (d *Daemon) ConsoleLog(ctx context.Context, ref string, offset int64) ([]byte, error) {
 	sb, err := d.Get(ctx, ref)
 	if err != nil {
 		return nil, err
@@ -26,5 +26,11 @@ func (d *Daemon) ConsoleLog(ctx context.Context, ref string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return data, nil
+	if offset < 0 {
+		return nil, fmt.Errorf("offset must not be negative")
+	}
+	if offset > int64(len(data)) {
+		offset = int64(len(data))
+	}
+	return data[offset:], nil
 }

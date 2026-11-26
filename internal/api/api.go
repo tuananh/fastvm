@@ -3,6 +3,7 @@
 package api
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
@@ -44,7 +45,47 @@ func New(rt manager.Runtime, images manager.Images, log *slog.Logger) *Server {
 }
 
 // Handler returns the HTTP handler (used by tests).
-func (s *Server) Handler() http.Handler { return s.mux }
+func (s *Server) Handler() http.Handler { return gzipHandler(s.mux) }
+
+// gzipHandler compresses normal HTTP responses when the client advertises gzip.
+// Upgrade requests are passed through untouched so WebSocket/shell hijacking
+// continues to work.
+func gzipHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Upgrade") != "" || !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, w: gz}, r)
+	})
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	w       *gzip.Writer
+	started bool
+}
+
+func (g *gzipResponseWriter) start() {
+	if !g.started {
+		g.started = true
+		g.Header().Del("Content-Length")
+	}
+}
+
+func (g *gzipResponseWriter) WriteHeader(code int) {
+	g.start()
+	g.ResponseWriter.WriteHeader(code)
+}
+
+func (g *gzipResponseWriter) Write(p []byte) (int, error) {
+	g.start()
+	return g.w.Write(p)
+}
 
 // MetricsProvider is implemented by daemons that expose Prometheus metrics.
 type MetricsProvider interface {
@@ -61,13 +102,14 @@ type KernelManager interface {
 // ConsoleLogProvider is implemented by daemons that expose the host-captured
 // guest serial console.
 type ConsoleLogProvider interface {
-	ConsoleLog(ctx context.Context, ref string) ([]byte, error)
+	ConsoleLog(ctx context.Context, ref string, offset int64) ([]byte, error)
 }
 
 // FileCopier is implemented by daemons that support guest file transfer.
 type FileCopier interface {
 	CopyToGuest(ctx context.Context, ref, path string, mode os.FileMode, r io.Reader) error
 	CopyFromGuest(ctx context.Context, ref, path string, w io.Writer) (os.FileMode, int64, error)
+	CopyFromGuestFrom(ctx context.Context, ref, path string, offset int64, w io.Writer) (os.FileMode, int64, error)
 	StatGuest(ctx context.Context, ref, path string) (os.FileMode, int64, error)
 }
 
@@ -84,6 +126,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/sandboxes", s.handleList)
 	s.mux.HandleFunc("POST /v1/sandboxes", s.handleCreate)
 	s.mux.HandleFunc("GET /v1/sandboxes/{ref}", s.handleGet)
+	s.mux.HandleFunc("GET /v1/sandboxes/stats", s.handleStatsAll)
 	s.mux.HandleFunc("GET /v1/sandboxes/{ref}/stats", s.handleStats)
 	s.mux.HandleFunc("PATCH /v1/sandboxes/{ref}/resources", s.handleResize)
 	s.mux.HandleFunc("PUT /v1/sandboxes/{ref}/file", s.handleCopyTo)
@@ -112,7 +155,7 @@ func (s *Server) ServeTLS(ctx context.Context, addr string, tlsConfig *tls.Confi
 	}
 	tlsLn := tls.NewListener(ln, tlsConfig)
 	srv := &http.Server{
-		Handler:           s.mux,
+		Handler:           s.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
@@ -142,7 +185,7 @@ func (s *Server) Serve(ctx context.Context, socketPath string) error {
 		ln.Close()
 		return err
 	}
-	srv := &http.Server{Handler: s.mux, ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -200,14 +243,23 @@ func (s *Server) handleCopyFrom(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path query parameter is required"})
 		return
 	}
+	offset, err := queryOffset(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	mode, size, err := c.StatGuest(r.Context(), r.PathValue("ref"), path)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
+	if offset > size {
+		offset = size
+	}
 	w.Header().Set("X-Fastvm-Mode", strconv.FormatUint(uint64(mode.Perm()), 8))
-	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-	if _, _, err := c.CopyFromGuest(r.Context(), r.PathValue("ref"), path, w); err != nil {
+	w.Header().Set("X-Fastvm-Size", strconv.FormatInt(size, 10))
+	w.Header().Set("Content-Length", strconv.FormatInt(size-offset, 10))
+	if _, _, err := c.CopyFromGuestFrom(r.Context(), r.PathValue("ref"), path, offset, w); err != nil {
 		// The response has already started; log-only is the best we can do here.
 		s.log.Warn("copy from guest failed", "sandbox", r.PathValue("ref"), "path", path, "err", err)
 	}
@@ -219,12 +271,18 @@ func (s *Server) handleConsole(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data, err := c.ConsoleLog(r.Context(), r.PathValue("ref"))
+	offset, err := queryOffset(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	data, err := c.ConsoleLog(r.Context(), r.PathValue("ref"), offset)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-Fastvm-Size", strconv.FormatInt(offset+int64(len(data)), 10))
 	_, _ = w.Write(data)
 }
 
@@ -287,6 +345,18 @@ func (s *Server) handleUseKernel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func queryOffset(r *http.Request) (int64, error) {
+	raw := r.URL.Query().Get("offset")
+	if raw == "" {
+		return 0, nil
+	}
+	offset, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || offset < 0 {
+		return 0, fmt.Errorf("offset must be a non-negative integer")
+	}
+	return offset, nil
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
@@ -456,6 +526,18 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, sb)
+}
+
+func (s *Server) handleStatsAll(w http.ResponseWriter, r *http.Request) {
+	list, err := s.rt.StatsAll(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if list == nil {
+		list = []types.SandboxStats{}
+	}
+	writeJSON(w, http.StatusOK, list)
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {

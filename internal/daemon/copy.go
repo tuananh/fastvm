@@ -93,6 +93,12 @@ func (d *Daemon) CopyToGuest(ctx context.Context, ref, path string, mode os.File
 }
 
 func (d *Daemon) CopyFromGuest(ctx context.Context, ref, path string, w io.Writer) (os.FileMode, int64, error) {
+	return d.CopyFromGuestFrom(ctx, ref, path, 0, w)
+}
+
+// CopyFromGuestFrom copies a guest file starting at offset. It returns the file
+// mode and full file size.
+func (d *Daemon) CopyFromGuestFrom(ctx context.Context, ref, path string, offset int64, w io.Writer) (os.FileMode, int64, error) {
 	rt, err := d.runtimeFor(ctx, ref)
 	if err != nil {
 		return 0, 0, err
@@ -120,7 +126,12 @@ func (d *Daemon) CopyFromGuest(ctx context.Context, ref, path string, w io.Write
 	if err != nil {
 		return 0, 0, fmt.Errorf("copy from guest: %w", guestFileError(err))
 	}
-	var offset int64
+	if offset < 0 {
+		return 0, 0, fmt.Errorf("offset must not be negative")
+	}
+	if offset > size {
+		offset = size
+	}
 	for offset < size {
 		data, curSize, _, err := ac.FileRead(ctx, guest, offset, copyChunkSize)
 		if err != nil {
