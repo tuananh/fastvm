@@ -10,6 +10,7 @@ import { LogsDialog } from "../components/LogsDialog";
 import { TerminalDialog } from "../components/TerminalDialog";
 import { VmTable } from "../components/VmTable";
 import ImagesPage from "./ImagesPage";
+import KernelsPage from "./KernelsPage";
 import { SandboxDetailPage } from "./SandboxDetailPage";
 import type { PendingAction, VmActionKind } from "../components/vmActions";
 import {
@@ -44,7 +45,11 @@ export default function DashboardPage() {
   const deleteSandbox = useDeleteSandbox();
 
   const [view, setView] = useState<ConsoleView>(() =>
-    typeof window !== "undefined" && window.location.hash === "#images" ? "images" : "sandboxes",
+    typeof window !== "undefined" && window.location.hash === "#images"
+      ? "images"
+      : window.location.hash === "#kernels"
+        ? "kernels"
+        : "sandboxes",
   );
   const [selectedSandboxId, setSelectedSandboxId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -62,7 +67,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const onHashChange = () => {
-      setView(window.location.hash === "#images" ? "images" : "sandboxes");
+      setView(
+        window.location.hash === "#images"
+          ? "images"
+          : window.location.hash === "#kernels"
+            ? "kernels"
+            : "sandboxes",
+      );
     };
     window.addEventListener("hashchange", onHashChange);
     return () => {
@@ -72,7 +83,7 @@ export default function DashboardPage() {
 
   const navigate = useCallback((next: ConsoleView) => {
     setView(next);
-    const hash = next === "images" ? "#images" : "#sandboxes";
+    const hash = next === "images" ? "#images" : next === "kernels" ? "#kernels" : "#sandboxes";
     if (window.location.hash !== hash) {
       window.history.replaceState(null, "", hash);
     }
@@ -285,7 +296,9 @@ export default function DashboardPage() {
                   ? selectedSandbox.name
                   : view === "images"
                     ? "Images"
-                    : "Activity"}
+                    : view === "kernels"
+                      ? "Kernels"
+                      : "Activity"}
               </span>
               {view === "sandbox" && selectedSandbox !== null ? (
                 <span className="ml-1 hidden truncate text-[var(--app-faint)] sm:inline">
@@ -321,7 +334,7 @@ export default function DashboardPage() {
               {versionText}
             </span>
 
-            {view !== "images" ? (
+            {view === "sandboxes" ? (
               <IconButton
                 label="Refresh sandboxes"
                 onClick={() => void handleRefresh()}
@@ -370,6 +383,8 @@ export default function DashboardPage() {
                   onAutoOpenConsumed={() => setOpenPullOnImages(false)}
                   onCreateVm={createFromImage}
                 />
+              ) : view === "kernels" ? (
+                <KernelsPage />
               ) : (
                 <>
                   <section id="overview" aria-label="Overview">

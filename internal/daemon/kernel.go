@@ -174,3 +174,57 @@ func (d *Daemon) UseKernel(_ context.Context, release string) (types.KernelUseRe
 	}
 	return types.KernelUseResult{Path: path, Current: filepath.Join(dir, "current")}, nil
 }
+
+// ListRemoteKernels returns direct-boot kernels available for this host.
+func (d *Daemon) ListRemoteKernels(ctx context.Context) (types.KernelRemoteList, error) {
+	releases, err := kernel.Remote(ctx, &http.Client{Timeout: 30 * time.Second}, 10)
+	if err != nil {
+		return types.KernelRemoteList{}, err
+	}
+	arch, err := kernel.HostArch()
+	if err != nil {
+		return types.KernelRemoteList{}, err
+	}
+	out := types.KernelRemoteList{Kernels: make([]types.KernelRemoteInfo, 0)}
+	for _, release := range releases {
+		for _, asset := range release.Assets {
+			if !kernel.DirectBootAsset(asset.Name) || !kernel.AssetMatchesArch(asset.Name, arch) {
+				continue
+			}
+			out.Kernels = append(out.Kernels, types.KernelRemoteInfo{
+				Release: release.Tag, Asset: asset.Name, SizeBytes: asset.Size, SHA256: asset.SHA256,
+			})
+		}
+	}
+	return out, nil
+}
+
+// RemoveKernel deletes an installed kernel unless it is the active default or
+// pinned by an existing sandbox.
+func (d *Daemon) RemoveKernel(ctx context.Context, release string) (types.KernelRemoveResult, error) {
+	dir := d.kernelDir()
+	resolved, err := kernel.Resolve(dir, release)
+	if errors.Is(err, kernel.ErrNotFound) {
+		return types.KernelRemoveResult{}, d.kernelNotInstalled(release)
+	}
+	if err != nil {
+		return types.KernelRemoveResult{}, err
+	}
+	list, err := d.st.ListSandboxes(ctx)
+	if err != nil {
+		return types.KernelRemoveResult{}, err
+	}
+	for _, sb := range list {
+		if sb.KernelPath == resolved.Path {
+			return types.KernelRemoveResult{}, fmt.Errorf("%w: kernel %s is used by sandbox %s", manager.ErrConflict, resolved.Release, sb.Name)
+		}
+	}
+	removed, err := kernel.Remove(dir, release)
+	if errors.Is(err, kernel.ErrCurrent) {
+		return types.KernelRemoveResult{}, fmt.Errorf("%w: kernel %s is the current default; select another kernel first", manager.ErrConflict, release)
+	}
+	if err != nil {
+		return types.KernelRemoveResult{}, err
+	}
+	return types.KernelRemoveResult{Release: removed.Release, Path: resolved.Path}, nil
+}

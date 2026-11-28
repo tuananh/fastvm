@@ -5,6 +5,7 @@ import {
   baseDiskSchema,
   eventListSchema,
   kernelListSchema,
+  kernelRemoteListSchema,
   sandboxListSchema,
   sandboxSchema,
   sandboxStatsSchema,
@@ -16,6 +17,7 @@ import type {
   Event,
   ExecResult,
   KernelList,
+  KernelRemoteList,
   Sandbox,
   SandboxStats,
   VersionInfo,
@@ -207,6 +209,49 @@ export function getAllSandboxStats(): Promise<SandboxStats[]> {
 /** `GET /v1/kernels` */
 export function listKernels(): Promise<KernelList> {
   return request(`${API_PREFIX}/kernels`, {}, kernelListSchema);
+}
+
+/** `GET /v1/kernels/remote` */
+export function listRemoteKernels(): Promise<KernelRemoteList> {
+  return request(`${API_PREFIX}/kernels/remote`, {}, kernelRemoteListSchema);
+}
+
+/** `POST /v1/kernels/download` */
+export interface KernelDownloadInput {
+  release: string;
+  set_default?: boolean;
+}
+
+export function downloadKernel(release: string, force = false): Promise<{ release: string }> {
+  return request(
+    `${API_PREFIX}/kernels/download`,
+    { method: "POST", body: JSON.stringify({ release, force }) },
+    z.object({ release: z.string() }).passthrough(),
+  );
+}
+
+/** `POST /v1/kernels/use` */
+export interface KernelUseResult {
+  current: string;
+  path: string;
+}
+
+export function useKernel(release: string): Promise<KernelUseResult> {
+  return request(
+    `${API_PREFIX}/kernels/use`,
+    { method: "POST", body: JSON.stringify({ release }) },
+    z.object({ current: z.string(), path: z.string() }).passthrough(),
+  );
+}
+
+/** `DELETE /v1/kernels?release=...` */
+export function removeKernel(release: string): Promise<{ release: string }> {
+  const params = new URLSearchParams({ release });
+  return request(
+    `${API_PREFIX}/kernels?${params.toString()}`,
+    { method: "DELETE" },
+    z.object({ release: z.string() }).passthrough(),
+  );
 }
 
 /** `GET /v1/images` */

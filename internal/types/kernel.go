@@ -38,3 +38,22 @@ type KernelUseResult struct {
 	Path    string `json:"path"`
 	Current string `json:"current"`
 }
+
+// KernelRemoteInfo is one installable kernel asset from cloud-hypervisor/linux.
+type KernelRemoteInfo struct {
+	Release   string `json:"release"`
+	Asset     string `json:"asset"`
+	SizeBytes int64  `json:"size_bytes"`
+	SHA256    string `json:"sha256,omitempty"`
+}
+
+// KernelRemoteList is the list of kernels available for download.
+type KernelRemoteList struct {
+	Kernels []KernelRemoteInfo `json:"kernels"`
+}
+
+// KernelRemoveResult describes a removed kernel.
+type KernelRemoveResult struct {
+	Release string `json:"release"`
+	Path    string `json:"path"`
+}

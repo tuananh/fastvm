@@ -166,3 +166,35 @@ func TestListLocal(t *testing.T) {
 		t.Fatalf("items = %+v", items)
 	}
 }
+
+func TestRemoveKernel(t *testing.T) {
+	dir := t.TempDir()
+	active := filepath.Join(dir, "release-1-vmlinux-x86_64")
+	inactive := filepath.Join(dir, "release-2-vmlinux-x86_64")
+	for _, path := range []string{active, inactive} {
+		if err := os.WriteFile(path, []byte("kernel"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path+".sha256", []byte("checksum\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Base(active), filepath.Join(dir, "current")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Remove(dir, "release-2"); err != nil {
+		t.Fatalf("remove inactive: %v", err)
+	}
+	if _, err := os.Stat(inactive); !os.IsNotExist(err) {
+		t.Fatalf("inactive kernel still exists: %v", err)
+	}
+	if _, err := os.Stat(inactive + ".sha256"); !os.IsNotExist(err) {
+		t.Fatalf("sidecar still exists: %v", err)
+	}
+	if _, err := Remove(dir, "release-1"); err == nil {
+		t.Fatal("removing the active kernel should fail")
+	}
+	if _, err := os.Stat(active); err != nil {
+		t.Fatalf("active kernel was removed: %v", err)
+	}
+}

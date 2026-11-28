@@ -95,8 +95,10 @@ type MetricsProvider interface {
 // KernelManager is implemented by daemons that manage guest kernels.
 type KernelManager interface {
 	ListKernels(ctx context.Context) (types.KernelList, error)
+	ListRemoteKernels(ctx context.Context) (types.KernelRemoteList, error)
 	DownloadKernel(ctx context.Context, req types.KernelDownloadRequest) (types.KernelDownloadResult, error)
 	UseKernel(ctx context.Context, release string) (types.KernelUseResult, error)
+	RemoveKernel(ctx context.Context, release string) (types.KernelRemoveResult, error)
 }
 
 // ConsoleLogProvider is implemented by daemons that expose the host-captured
@@ -117,8 +119,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /metrics", s.handleMetrics)
 	s.mux.HandleFunc("GET /v1/version", s.handleVersion)
 	s.mux.HandleFunc("GET /v1/kernels", s.handleListKernels)
+	s.mux.HandleFunc("GET /v1/kernels/remote", s.handleListRemoteKernels)
 	s.mux.HandleFunc("POST /v1/kernels/download", s.handleDownloadKernel)
 	s.mux.HandleFunc("POST /v1/kernels/use", s.handleUseKernel)
+	s.mux.HandleFunc("DELETE /v1/kernels", s.handleRemoveKernel)
 	s.mux.HandleFunc("GET /v1/images", s.handleListImages)
 	s.mux.HandleFunc("POST /v1/images/pull", s.handlePullImage)
 	s.mux.HandleFunc("POST /v1/images/ingest", s.handleIngest)
@@ -301,6 +305,42 @@ func (s *Server) handleListKernels(w http.ResponseWriter, r *http.Request) {
 		list.Kernels = []types.KernelInfo{}
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *Server) handleListRemoteKernels(w http.ResponseWriter, r *http.Request) {
+	k, ok := s.rt.(KernelManager)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	list, err := k.ListRemoteKernels(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if list.Kernels == nil {
+		list.Kernels = []types.KernelRemoteInfo{}
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *Server) handleRemoveKernel(w http.ResponseWriter, r *http.Request) {
+	k, ok := s.rt.(KernelManager)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	release := strings.TrimSpace(r.URL.Query().Get("release"))
+	if release == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorEnvelope{Error: "release is required"})
+		return
+	}
+	result, err := k.RemoveKernel(r.Context(), release)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleDownloadKernel(w http.ResponseWriter, r *http.Request) {

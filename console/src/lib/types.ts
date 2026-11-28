@@ -101,6 +101,7 @@ export type BaseDisk = z.infer<typeof baseDiskSchema>;
 export const kernelInfoSchema = z
   .object({
     name: z.string(),
+    path: z.string().optional(),
     release: z.string().optional(),
     asset: z.string().optional(),
     size_bytes: z.number().int(),
@@ -173,3 +174,19 @@ export const execResultSchema = z
   })
   .passthrough();
 export type ExecResult = z.infer<typeof execResultSchema>;
+
+/** One downloadable kernel from the daemon's remote list. */
+export const kernelRemoteInfoSchema = z
+  .object({
+    release: z.string(),
+    asset: z.string(),
+    size_bytes: z.number().int(),
+    sha256: z.string().optional(),
+  })
+  .passthrough();
+export type KernelRemoteInfo = z.infer<typeof kernelRemoteInfoSchema>;
+
+export const kernelRemoteListSchema = z
+  .object({ kernels: z.array(kernelRemoteInfoSchema) })
+  .passthrough();
+export type KernelRemoteList = z.infer<typeof kernelRemoteListSchema>;

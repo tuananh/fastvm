@@ -2,6 +2,7 @@ import {
   ArrowTopRightOnSquareIcon,
   BookOpenIcon,
   CircleStackIcon,
+  CpuChipIcon,
   MagnifyingGlassIcon,
   PlusIcon,
   Squares2X2Icon,
@@ -14,7 +15,7 @@ import { BoltIcon } from "./icons";
 import { ThemeMenu } from "./ThemeMenu";
 import { UserMenu } from "./UserMenu";
 
-export type ConsoleView = "sandboxes" | "images" | "sandbox";
+export type ConsoleView = "sandboxes" | "images" | "kernels" | "sandbox";
 
 export interface AppSidebarProps {
   open: boolean;
@@ -231,6 +232,21 @@ export function AppSidebar({
               >
                 <CircleStackIcon className="size-4 shrink-0" aria-hidden="true" />
                 Images
+              </a>
+            </li>
+            <li>
+              <a
+                href="#kernels"
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate("kernels");
+                  onClose();
+                }}
+                aria-current={view === "kernels" ? "page" : undefined}
+                className={view === "kernels" ? NAV_LINK_ACTIVE : NAV_LINK}
+              >
+                <CpuChipIcon className="size-4 shrink-0" aria-hidden="true" />
+                Kernels
               </a>
             </li>
             <li>

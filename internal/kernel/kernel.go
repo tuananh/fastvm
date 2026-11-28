@@ -246,6 +246,9 @@ func ListLocal(dir string) ([]LocalKernel, error) {
 // ErrNotFound means no local kernel matched a reference.
 var ErrNotFound = errors.New("kernel not found")
 
+// ErrCurrent means the kernel is the active daemon default and cannot be removed.
+var ErrCurrent = errors.New("kernel is the current default")
+
 // Resolved is a locally installed, direct-boot kernel selected by reference.
 type Resolved struct {
 	Path    string
@@ -287,6 +290,25 @@ func Resolve(dir, ref string) (Resolved, error) {
 	default:
 		return Resolved{}, fmt.Errorf("kernel %q is ambiguous", ref)
 	}
+}
+
+// Remove deletes one locally installed kernel and its SHA-256 sidecar. The
+// current default and the file it points at are never removed.
+func Remove(dir, ref string) (Resolved, error) {
+	resolved, err := Resolve(dir, ref)
+	if err != nil {
+		return Resolved{}, err
+	}
+	if current, err := Current(dir); err == nil && current == resolved.Path {
+		return Resolved{}, fmt.Errorf("%w: %s", ErrCurrent, resolved.Release)
+	}
+	if err := os.Remove(resolved.Path); err != nil {
+		return Resolved{}, fmt.Errorf("kernel: remove %s: %w", resolved.Path, err)
+	}
+	if err := os.Remove(resolved.Path + ".sha256"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return Resolved{}, fmt.Errorf("kernel: remove checksum: %w", err)
+	}
+	return resolved, nil
 }
 
 // Available returns installed direct-boot kernel names for error messages.

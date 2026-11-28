@@ -11,6 +11,7 @@ fastvmctl kernel ls
 fastvmctl kernel remote-ls [--limit N]
 fastvmctl kernel download [release] [--asset NAME] [--force]
 fastvmctl kernel use <release>
+fastvmctl kernel rm <release>
 ```
 
 ## DESCRIPTION
@@ -59,6 +60,12 @@ latest release is used. The default asset follows the host architecture.
 Existing files are reused only when their SHA-256 matches. Use `--force` to
 replace a mismatched file.
 
+### `rm`
+
+Remove an installed kernel and its checksum sidecar. The current default
+kernel cannot be removed; select another kernel with `kernel use` first.
+Kernels pinned by an existing sandbox are also refused.
+
 ### `use`
 
 Point the daemon's `current` symlink at a downloaded release. To pin only one
@@ -87,6 +94,7 @@ fastvmctl kernel download ch-release-v7.2.8-20261009
 fastvmctl kernel download --set-default ch-release-v7.2.8-20261009
 fastvmctl kernel use ch-release-v7.2.8-20261009
 fastvmctl kernel ls
+fastvmctl kernel rm ch-release-v7.2.7-20261001
 ```
 
 Example output:

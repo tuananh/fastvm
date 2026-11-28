@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"text/tabwriter"
 	"time"
@@ -29,6 +30,7 @@ kernel directory.`,
 		newKernelRemoteListCmd(),
 		newKernelDownloadCmd(),
 		newKernelUseCmd(),
+		newKernelRemoveCmd(),
 	)
 	return cmd
 }
@@ -198,4 +200,23 @@ func noArgsWithHelp(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("expected no arguments, got %d", len(args))
 	}
 	return nil
+}
+
+func newKernelRemoveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "rm <release>",
+		Aliases: []string{"remove"},
+		Short:   "Remove an installed kernel",
+		Example: `  fastvmctl kernel rm ch-release-v7.2.8-20261009`,
+		Args:    exactArgsWithHelp(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			var result types.KernelRemoveResult
+			path := "/v1/kernels?release=" + url.QueryEscape(args[0])
+			if err := do(http.MethodDelete, path, nil, &result); err != nil {
+				return err
+			}
+			fmt.Printf("removed %s (%s)\n", result.Release, result.Path)
+			return nil
+		},
+	}
 }
