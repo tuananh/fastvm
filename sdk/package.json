@@ -1,0 +1,35 @@
+{
+  "name": "@tuananh/fastvm",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the fastvm micro-VM runtime",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "vp pack --dts",
+    "check": "vp check",
+    "test": "vp test"
+  },
+  "dependencies": {
+    "undici": "^8.13.1",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.11",
+    "@types/ws": "^8.18.2",
+    "vite-plus": "1.8.0"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

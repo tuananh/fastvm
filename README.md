@@ -149,6 +149,27 @@ More CLI details, including auto-publish, snapshots, and console access, are in
 [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) for the full walkthrough and
 [docs/FVMFILE.md](docs/FVMFILE.md) for the config format.
 
+## TypeScript SDK
+
+```ts
+import { FastVM } from "@tuananh/fastvm";
+
+const vm = await FastVM.connect();
+
+const result = await vm.run({
+  image: "python:3.15.2-alpine",
+  command: ["python", "-c", "import sys; print(sys.version.split()[0])"],
+});
+
+result.assertSuccess();
+console.log(result.stdout);
+await vm.close();
+```
+
+The SDK covers the full daemon API over Unix sockets, HTTP or mTLS.
+See [sdk/README.md](sdk/README.md) for sandboxes, files, shells, images,
+kernels, snapshots and events.
+
 ## Install
 
 ```sh
