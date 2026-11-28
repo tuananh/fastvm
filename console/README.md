@@ -29,9 +29,9 @@ avatar (persisted per browser).
 
 Dark and light themes, side by side:
 
-![fastvm console](../docs/assets/console.png)
+![fastvm console](../docs/assets/console-light.png)
 
-![Sandbox details](../docs/assets/console-sandbox.png)
+![Sandbox details](../docs/assets/console-light-sandbox.png)
 
 Exec terminal:
 

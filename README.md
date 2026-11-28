@@ -15,9 +15,9 @@ virtio-fs.
 > may change without notice. It is **not ready for production use** — run it
 > only in disposable development or testing environments.
 
-![fastvm console](docs/assets/console.png)
+![fastvm console](docs/assets/console-light.png)
 
-![Sandbox details](docs/assets/console-sandbox.png)
+![Sandbox details](docs/assets/console-light-sandbox.png)
 
 ## CLI
 
