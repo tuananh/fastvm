@@ -17,7 +17,7 @@ virtio-fs.
 
 ![fastvm console](docs/assets/console.png)
 
-![Sandbox inspector](docs/assets/console-sandbox.png)
+![Sandbox details](docs/assets/console-sandbox.png)
 
 ## CLI
 

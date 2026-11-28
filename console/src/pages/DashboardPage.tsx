@@ -7,11 +7,10 @@ import { CreateVmModal } from "../components/CreateVmModal";
 import { ClockIcon, PlusIcon, RefreshIcon } from "../components/icons";
 import { SummaryCards } from "../components/SummaryCards";
 import { LogsDialog } from "../components/LogsDialog";
-import { SandboxChat } from "../components/SandboxChat";
 import { TerminalDialog } from "../components/TerminalDialog";
-import { VmDetailDrawer } from "../components/VmDetailDrawer";
 import { VmTable } from "../components/VmTable";
 import ImagesPage from "./ImagesPage";
+import { SandboxDetailPage } from "./SandboxDetailPage";
 import type { PendingAction, VmActionKind } from "../components/vmActions";
 import {
   queryKeys,
@@ -32,7 +31,7 @@ const EMPTY_IMAGES: readonly BaseDisk[] = [];
 
 /**
  * Main console screen: HyperUI sidebar shell with a polled sandbox table,
- * summary counters, lifecycle actions, create flow and live detail drawer.
+ * summary counters, lifecycle actions, create flow and full-page sandbox details.
  */
 export default function DashboardPage() {
   const toast = useToast();
@@ -56,9 +55,6 @@ export default function DashboardPage() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Sandbox | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [detailSnapshot, setDetailSnapshot] = useState<Sandbox | null>(null);
-  const [detailRef, setDetailRef] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [terminalTarget, setTerminalTarget] = useState<Sandbox | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [logsTarget, setLogsTarget] = useState<Sandbox | null>(null);
@@ -111,11 +107,6 @@ export default function DashboardPage() {
       ? null
       : (sandboxes.find((sandbox) => sandbox.id === selectedSandboxId) ?? null);
 
-  const detailSandbox =
-    detailRef === null
-      ? detailSnapshot
-      : (sandboxes.find((sandbox) => sandbox.id === detailRef) ?? detailSnapshot);
-
   const terminalSandbox =
     terminalTarget === null
       ? null
@@ -125,18 +116,6 @@ export default function DashboardPage() {
     logsTarget === null
       ? null
       : (sandboxes.find((sandbox) => sandbox.id === logsTarget.id) ?? logsTarget);
-
-  const openDetails = useCallback((sandbox: Sandbox) => {
-    setDetailSnapshot(sandbox);
-    setDetailRef(sandbox.id);
-    setDrawerOpen(true);
-  }, []);
-
-  const closeDrawer = useCallback(() => {
-    setDrawerOpen(false);
-    setDetailRef(null);
-    setDetailSnapshot(null);
-  }, []);
 
   const openTerminal = useCallback((sandbox: Sandbox) => {
     setTerminalTarget(sandbox);
@@ -227,8 +206,9 @@ export default function DashboardPage() {
       toast.success(`Deleted ${target.name}`);
       setDeleteOpen(false);
       setDeleteTarget(null);
-      if (detailRef === target.id) {
-        closeDrawer();
+      if (selectedSandboxId === target.id) {
+        setSelectedSandboxId(null);
+        navigate("sandboxes");
       }
       if (terminalTarget?.id === target.id) {
         closeTerminal();
@@ -242,13 +222,13 @@ export default function DashboardPage() {
       setPendingAction(null);
     }
   }, [
-    closeDrawer,
     closeLogs,
     closeTerminal,
     deleteSandbox,
     deleteTarget,
-    detailRef,
     logsTarget,
+    navigate,
+    selectedSandboxId,
     queryClient,
     terminalTarget,
     toast,
@@ -368,12 +348,17 @@ export default function DashboardPage() {
 
         {view === "sandbox" && selectedSandbox !== null ? (
           <main className="min-h-0 flex-1">
-            <SandboxChat
+            <SandboxDetailPage
               sandbox={selectedSandbox}
               images={images}
-              onNewVm={openCreate}
-              onTerminal={() => openTerminal(selectedSandbox)}
-              onLogs={() => openLogs(selectedSandbox)}
+              pendingAction={pendingAction}
+              onBack={() => {
+                setSelectedSandboxId(null);
+                navigate("sandboxes");
+              }}
+              onAction={(kind, sandbox) => void handleAction(kind, sandbox)}
+              onExec={openTerminal}
+              onLogs={openLogs}
             />
           </main>
         ) : (
@@ -422,7 +407,7 @@ export default function DashboardPage() {
                       pendingAction={pendingAction}
                       onCreate={openCreate}
                       onRetry={() => void handleRefresh()}
-                      onDetails={openDetails}
+                      onDetails={selectSandbox}
                       onAction={(kind, sandbox) => void handleAction(kind, sandbox)}
                       onExec={openTerminal}
                       onLogs={openLogs}
@@ -476,19 +461,6 @@ export default function DashboardPage() {
           immediately and the scratch disk is discarded. This cannot be undone.
         </p>
       </Modal>
-
-      {detailSnapshot !== null ? (
-        <VmDetailDrawer
-          sandbox={detailSandbox}
-          open={drawerOpen}
-          images={images}
-          pendingAction={pendingAction}
-          onClose={closeDrawer}
-          onAction={(kind, sandbox) => void handleAction(kind, sandbox)}
-          onExec={openTerminal}
-          onLogs={openLogs}
-        />
-      ) : null}
 
       {terminalTarget !== null ? (
         <TerminalDialog sandbox={terminalSandbox} open={terminalOpen} onClose={closeTerminal} />

@@ -31,7 +31,7 @@ Dark and light themes, side by side:
 
 ![fastvm console](../docs/assets/console.png)
 
-![Sandbox inspector](../docs/assets/console-sandbox.png)
+![Sandbox details](../docs/assets/console-sandbox.png)
 
 Exec terminal:
 
