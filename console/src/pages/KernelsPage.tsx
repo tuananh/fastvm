@@ -6,12 +6,19 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
-import { downloadKernel, listRemoteKernels, removeKernel, useKernel } from "../lib/api";
+import { ApiError, downloadKernel, listRemoteKernels, removeKernel, useKernel } from "../lib/api";
 import { queryKeys, useKernels } from "../lib/queries";
 import type { KernelInfo, KernelRemoteInfo } from "../lib/types";
 import { Button, Spinner, cn, useToast } from "../ui";
 import { describeError } from "../utils/errors";
 import { formatBytes } from "../utils/format";
+
+function remoteError(error: unknown): string {
+  if (error instanceof ApiError && error.status === 404) {
+    return "Remote kernel listing is not available. Restart fastvmd with this build so GET /v1/kernels/remote is served.";
+  }
+  return describeError(error);
+}
 
 function shortSha(value: string | undefined): string {
   return value === undefined || value === "" ? "—" : value.slice(0, 12);
@@ -308,7 +315,7 @@ export default function KernelsPage() {
           {remote.isPending ? (
             <p className="p-4 text-[12px] text-[var(--app-muted)]">Fetching release list…</p>
           ) : remote.isError ? (
-            <p className="p-4 text-[12px] text-[var(--om-red)]">{describeError(remote.error)}</p>
+            <p className="p-4 text-[12px] text-[var(--om-red)]">{remoteError(remote.error)}</p>
           ) : (remote.data?.kernels ?? []).length === 0 ? (
             <p className="p-4 text-[12px] text-[var(--app-muted)]">No matching kernels found.</p>
           ) : (
