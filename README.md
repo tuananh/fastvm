@@ -17,6 +17,8 @@ virtio-fs.
 
 ![fastvm console](docs/assets/console.png)
 
+![Sandbox inspector](docs/assets/console-sandbox.png)
+
 ## CLI
 
 The `fastvmctl` CLI provides a complete interface for managing sandboxes,
