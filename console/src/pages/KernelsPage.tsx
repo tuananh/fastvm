@@ -127,7 +127,6 @@ export default function KernelsPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const kernels = useKernels();
-  const [release, setRelease] = useState("");
   const [showRemote, setShowRemote] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -271,32 +270,6 @@ export default function KernelsPage() {
             </table>
           </div>
         )}
-      </section>
-
-      <section className="mt-4 border border-[var(--app-border)] bg-[var(--app-panel)]">
-        <header className="border-b border-[var(--app-border)] px-4 py-3">
-          <h2 className="text-[12px] font-semibold text-[var(--app-text)]">Download</h2>
-          <p className="mt-0.5 text-[11px] text-[var(--app-muted)]">
-            Downloads are verified against the release SHA-256. Leave the release empty for the
-            latest.
-          </p>
-        </header>
-        <div className="flex flex-wrap items-center gap-2 p-4">
-          <input
-            value={release}
-            onChange={(event) => setRelease(event.currentTarget.value)}
-            placeholder="release, e.g. ch-release-v7.2.8-20261009"
-            className="h-8 min-w-64 flex-1 border border-[var(--app-border)] bg-[var(--app-code)] px-2.5 font-mono text-[12px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-faint)] focus:border-[var(--app-accent)]"
-          />
-          <Button
-            variant="primary"
-            disabled={busy}
-            onClick={() => startDownload(release)}
-            icon={<CloudArrowDownIcon className="size-4" />}
-          >
-            {release.trim() === "" ? "Download latest" : "Download"}
-          </Button>
-        </div>
       </section>
 
       {showRemote ? (
