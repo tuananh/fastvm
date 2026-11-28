@@ -206,7 +206,7 @@ export default function KernelsPage() {
           }}
           icon={<CircleStackIcon className="size-4" />}
         >
-          Browse remote
+          List remote
         </Button>
       </div>
 
