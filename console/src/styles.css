@@ -136,11 +136,7 @@
 
 html,
 body {
-  font-family: var(--om-font);
-  font-variant-ligatures: none;
-  font-feature-settings:
-    "liga" 0,
-    "calt" 0;
+  font-family: var(--font-sans);
   background: var(--app-bg);
 }
 
