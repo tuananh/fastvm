@@ -66,6 +66,7 @@ export const sandboxSchema = z
     vcpus: z.number().int(),
     max_vcpus: z.number().int().optional(),
     memory_mb: z.number().int(),
+    root_size_gb: z.number().int().optional(),
     max_memory_mb: z.number().int().optional(),
     ip: z.string().optional(),
     wake_count: z.number().int(),
@@ -141,6 +142,7 @@ export const sandboxStatsSchema = z
     vcpus: z.number().int(),
     max_vcpus: z.number().int().optional(),
     memory_mb: z.number().int(),
+    root_size_gb: z.number().int().optional(),
     max_memory_mb: z.number().int().optional(),
     memory_rss_bytes: z.number().int(),
     guest_memory_used_bytes: z.number().int().optional(),
@@ -160,3 +162,14 @@ export type SandboxStats = z.infer<typeof sandboxStatsSchema>;
 export const sandboxListSchema = z.array(sandboxSchema);
 export const baseDiskListSchema = z.array(baseDiskSchema);
 export const eventListSchema = z.array(eventSchema);
+
+/** Response from `POST /v1/sandboxes/{ref}/exec`. */
+export const execResultSchema = z
+  .object({
+    exit_code: z.number().int(),
+    stdout: z.string().optional(),
+    stderr: z.string().optional(),
+    error: z.string().optional(),
+  })
+  .passthrough();
+export type ExecResult = z.infer<typeof execResultSchema>;

@@ -21,7 +21,7 @@
       // matches the persisted/system theme (no dark/light flash).
       (function () {
         var STORAGE_KEY = "fastvm.console.theme";
-        var mode = "auto";
+        var mode = "dark";
         try {
           var stored = window.localStorage.getItem(STORAGE_KEY);
           if (stored === "dark" || stored === "light" || stored === "auto") {
@@ -41,7 +41,7 @@
         root.dataset.theme = resolved;
         root.style.colorScheme = resolved;
         // Paint the page background before the stylesheet loads.
-        root.style.backgroundColor = resolved === "light" ? "#f9fafb" : "#030712";
+        root.style.backgroundColor = resolved === "light" ? "#eff1f5" : "#1a1b26";
       })();
     </script>
   </head>

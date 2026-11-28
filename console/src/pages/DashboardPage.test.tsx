@@ -135,7 +135,7 @@ describe("DashboardPage integration", () => {
   it("renders the version, summary, table row and live stats", async () => {
     renderDashboard();
 
-    expect(await screen.findByText("web-1")).toBeInTheDocument();
+    expect((await screen.findAllByText("web-1")).length).toBeGreaterThan(0);
     expect(await screen.findByText("fastvm v0.1.0")).toBeInTheDocument();
     expect(await screen.findByText("42.5%")).toBeInTheDocument();
     expect(screen.getByText("Total VMs")).toBeInTheDocument();

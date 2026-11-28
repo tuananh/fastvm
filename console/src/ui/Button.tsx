@@ -9,7 +9,8 @@ const base =
   "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:pointer-events-none disabled:opacity-50 dark:focus-visible:ring-indigo-900";
 
 const variants: Record<Variant, string> = {
-  primary: "border border-indigo-600 bg-indigo-600 text-white shadow-sm hover:bg-indigo-700",
+  primary:
+    "border border-[var(--app-accent)] bg-[var(--app-accent)] text-[var(--om-on-accent)] hover:opacity-90",
   secondary:
     "border border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 dark:hover:text-white",
   ghost:

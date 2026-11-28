@@ -65,3 +65,89 @@
 .spinning {
   animation: spin 1s linear infinite;
 }
+
+/* Console workspace palette, matched to term-llm-hacker (Omarchy themes).
+   Dark: Tokyo Night. Light: Catppuccin Latte. */
+:root {
+  --om-accent: #1e66f5;
+  --om-selection: #ccd0da;
+  --om-muted: #acb0be;
+  --om-background: #eff1f5;
+  --om-dark-background: #e3e4e8;
+  --om-darker-background: #d7d8dc;
+  --om-lighter-background: #dce0e8;
+  --om-foreground: #4c4f69;
+  --om-dark-foreground: #9ca0b0;
+  --om-light-foreground: #5c5f77;
+  --om-bright-foreground: #4c4f69;
+  --om-red: #d20f39;
+  --om-yellow: #df8e1d;
+  --om-orange: #d84e2b;
+  --om-green: #40a02b;
+  --om-cyan: #179299;
+  --om-blue: #1e66f5;
+  --om-magenta: #ea76cb;
+  --om-on-accent: #ffffff;
+
+  --om-fill: color-mix(in srgb, var(--om-foreground) 4%, transparent);
+  --om-fill-hover: color-mix(in srgb, var(--om-foreground) 8%, transparent);
+  --om-fill-selected: color-mix(in srgb, var(--om-foreground) 18%, transparent);
+  --om-line-soft: color-mix(in srgb, var(--om-foreground) 12%, transparent);
+  --om-line-hover: color-mix(in srgb, var(--om-foreground) 25%, transparent);
+  --om-radius: 0px;
+  --om-font:
+    "JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo,
+    Consolas, "DejaVu Sans Mono", monospace;
+
+  --app-bg: var(--om-background);
+  --app-sidebar: var(--om-dark-background);
+  --app-panel: var(--om-background);
+  --app-panel-2: var(--om-fill-hover);
+  --app-border: var(--om-line-soft);
+  --app-text: var(--om-foreground);
+  --app-muted: color-mix(in srgb, var(--om-foreground) 78%, var(--om-background));
+  --app-faint: var(--om-dark-foreground);
+  --app-accent: var(--om-accent);
+  --app-code: var(--om-darker-background);
+  --app-selected: var(--om-fill-selected);
+}
+
+[data-theme="dark"] {
+  --om-accent: #7aa2f7;
+  --om-selection: #292e42;
+  --om-muted: #414868;
+  --om-background: #1a1b26;
+  --om-dark-background: #13141c;
+  --om-darker-background: #0e0e14;
+  --om-lighter-background: #24283b;
+  --om-foreground: #a9b1d6;
+  --om-dark-foreground: #565f89;
+  --om-light-foreground: #b4bee6;
+  --om-bright-foreground: #c0caf5;
+  --om-red: #f7768e;
+  --om-yellow: #e0af68;
+  --om-orange: #eb927b;
+  --om-green: #9ece6a;
+  --om-cyan: #449dab;
+  --om-blue: #7aa2f7;
+  --om-magenta: #ad8ee6;
+  --om-on-accent: #1a1b26;
+}
+
+html,
+body {
+  font-family: var(--om-font);
+  font-variant-ligatures: none;
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0;
+  background: var(--app-bg);
+}
+
+/* Omarchy chrome is flat: one window radius and no shadows. */
+:where(body *),
+:where(body *)::before,
+:where(body *)::after {
+  border-radius: var(--om-radius) !important;
+  box-shadow: none !important;
+}

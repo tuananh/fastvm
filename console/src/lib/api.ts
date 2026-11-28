@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   baseDiskListSchema,
+  execResultSchema,
   baseDiskSchema,
   eventListSchema,
   kernelListSchema,
@@ -13,6 +14,7 @@ import type {
   BaseDisk,
   DataVolume,
   Event,
+  ExecResult,
   KernelList,
   Sandbox,
   SandboxStats,
@@ -125,6 +127,15 @@ export function listSandboxes(): Promise<Sandbox[]> {
 }
 
 /** `GET /v1/sandboxes/{ref}` */
+/** Run a non-interactive command in a sandbox. */
+export function execSandbox(ref: string, argv: string[]): Promise<ExecResult> {
+  return request(
+    `${sandboxPath(ref)}/exec`,
+    { method: "POST", body: JSON.stringify({ argv }) },
+    execResultSchema,
+  );
+}
+
 export function getSandbox(ref: string): Promise<Sandbox> {
   return request(sandboxPath(ref), {}, sandboxSchema);
 }

@@ -98,7 +98,7 @@ export function SummaryCards({ sandboxes, loading = false }: SummaryCardsProps) 
           key={summary.key}
           data-tone={summary.tone}
           title={summary.hint}
-          className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900"
+          className="flex items-center justify-between gap-3 rounded-xl border border-[var(--app-border)] bg-[var(--app-panel)] px-4 py-3"
         >
           {showSkeletons ? (
             <div className="flex flex-col gap-1.5" aria-hidden="true">
@@ -107,12 +107,12 @@ export function SummaryCards({ sandboxes, loading = false }: SummaryCardsProps) 
             </div>
           ) : (
             <div className="min-w-0">
-              <p className="truncate text-xs font-medium text-gray-500 dark:text-gray-400">
+              <p className="truncate text-[11px] font-medium text-[var(--app-muted)]">
                 {summary.label}
               </p>
               <p
                 data-testid={`summary-value-${summary.key}`}
-                className="mt-0.5 text-xl font-semibold text-gray-900 tabular-nums dark:text-white"
+                className="mt-0.5 text-xl font-semibold text-[var(--app-text)] tabular-nums"
               >
                 {summary.value}
               </p>
@@ -120,7 +120,7 @@ export function SummaryCards({ sandboxes, loading = false }: SummaryCardsProps) 
           )}
           <span
             className={cn(
-              "grid size-8 shrink-0 place-items-center rounded-md",
+              "grid size-8 shrink-0 place-items-center rounded-md border border-[var(--app-border)] bg-[var(--app-panel-2)] text-[var(--app-muted)]",
               TONE_BADGE[summary.tone],
             )}
             aria-hidden="true"

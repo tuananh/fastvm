@@ -1,4 +1,4 @@
-import { Bars3Icon } from "@heroicons/react/24/outline";
+import { Bars3Icon, CloudIcon, FolderIcon } from "@heroicons/react/24/outline";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { AppSidebar } from "../components/AppSidebar";
@@ -7,6 +7,7 @@ import { CreateVmModal } from "../components/CreateVmModal";
 import { ClockIcon, PlusIcon, RefreshIcon } from "../components/icons";
 import { SummaryCards } from "../components/SummaryCards";
 import { LogsDialog } from "../components/LogsDialog";
+import { SandboxChat } from "../components/SandboxChat";
 import { TerminalDialog } from "../components/TerminalDialog";
 import { VmDetailDrawer } from "../components/VmDetailDrawer";
 import { VmTable } from "../components/VmTable";
@@ -46,6 +47,7 @@ export default function DashboardPage() {
   const [view, setView] = useState<ConsoleView>(() =>
     typeof window !== "undefined" && window.location.hash === "#images" ? "images" : "sandboxes",
   );
+  const [selectedSandboxId, setSelectedSandboxId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [openPullOnImages, setOpenPullOnImages] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -80,6 +82,14 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const selectSandbox = useCallback((sandbox: Sandbox) => {
+    setSelectedSandboxId(sandbox.id);
+    setView("sandbox");
+    if (window.location.hash !== "#sandboxes") {
+      window.history.replaceState(null, "", "#sandboxes");
+    }
+  }, []);
+
   const openCreate = useCallback(() => {
     setCreateImage(null);
     setCreateOpen(true);
@@ -96,6 +106,10 @@ export default function DashboardPage() {
 
   const sandboxes = sandboxesQuery.data ?? EMPTY_SANDBOXES;
   const images = imagesQuery.data ?? EMPTY_IMAGES;
+  const selectedSandbox =
+    selectedSandboxId === null
+      ? null
+      : (sandboxes.find((sandbox) => sandbox.id === selectedSandboxId) ?? null);
 
   const detailSandbox =
     detailRef === null
@@ -254,48 +268,58 @@ export default function DashboardPage() {
         : `fastvmd ${version.data?.version ?? "?"}`;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
+    <div className="flex h-screen overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]">
       <AppSidebar
         open={sidebarOpen}
         view={view}
-        onNavigate={navigate}
+        sandboxes={sandboxes}
+        selectedSandboxId={selectedSandboxId}
+        onNavigate={(next) => {
+          navigate(next);
+          setSelectedSandboxId(null);
+        }}
+        onSelectSandbox={selectSandbox}
+        onNewVm={openCreate}
         onClose={() => setSidebarOpen(false)}
       />
 
       <div className="flex flex-1 flex-col overflow-y-auto">
-        <header className="flex items-center justify-between gap-4 border-b border-gray-200 bg-white px-4 py-4 sm:px-6 lg:px-8 dark:border-gray-800 dark:bg-gray-900">
-          <div className="flex min-w-0 items-center gap-3">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--app-border)] bg-[var(--app-bg)] px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
               aria-label="Open sidebar"
               aria-expanded={sidebarOpen}
               aria-controls="app-sidebar"
               onClick={() => setSidebarOpen(true)}
-              className="rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 lg:hidden dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white dark:focus-visible:ring-indigo-900"
+              className="rounded-md p-1.5 text-[var(--app-muted)] hover:bg-[var(--app-selected)] hover:text-[var(--app-text)] focus-visible:outline-none lg:hidden"
             >
-              <Bars3Icon className="size-5" />
+              <Bars3Icon className="size-4" />
             </button>
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold text-gray-900 dark:text-white">
-                {view === "images" ? "Images" : "Sandboxes"}
-              </h1>
-              <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                {view === "images"
-                  ? "Read-only OCI base disks shared by sandboxes."
-                  : "Micro-VMs on this host. Pause, offload, or wake them — traffic brings them back."}
-              </p>
-            </div>
+            <FolderIcon className="hidden size-4 text-[var(--app-faint)] sm:block" />
+            <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px]">
+              <span className="hidden shrink-0 text-[var(--app-muted)] sm:inline">fastvm</span>
+              <span className="hidden text-[var(--app-faint)] sm:inline">›</span>
+              <span className="truncate font-medium text-[var(--app-text)]">
+                {view === "sandbox" && selectedSandbox !== null
+                  ? selectedSandbox.name
+                  : view === "images"
+                    ? "Images"
+                    : "Activity"}
+              </span>
+              {view === "sandbox" && selectedSandbox !== null ? (
+                <span className="ml-1 hidden truncate text-[var(--app-faint)] sm:inline">
+                  {selectedSandbox.state}
+                </span>
+              ) : null}
+            </nav>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <span
               className={cn(
-                "hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap sm:inline-flex",
-                version.isError
-                  ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
-                  : version.isPending
-                    ? "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-400"
-                    : "border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-200",
+                "hidden items-center gap-1.5 rounded-full border border-[var(--app-border)] px-2 py-0.5 text-[11px] font-medium whitespace-nowrap sm:inline-flex",
+                version.isError ? "text-rose-400" : "text-[var(--app-muted)]",
               )}
               title={
                 version.isError
@@ -306,92 +330,109 @@ export default function DashboardPage() {
               <span
                 aria-hidden="true"
                 className={cn(
-                  "size-2 rounded-full",
+                  "size-1.5 rounded-full",
                   version.isError
-                    ? "bg-red-500"
+                    ? "bg-rose-400"
                     : version.isPending
                       ? "bg-gray-400"
-                      : "bg-green-500",
+                      : "bg-emerald-400",
                 )}
               />
               {versionText}
             </span>
 
-            {view === "sandboxes" ? (
-              <>
-                <IconButton
-                  label="Refresh sandboxes"
-                  onClick={() => void handleRefresh()}
-                  disabled={manualRefreshing}
-                >
-                  <RefreshIcon className={manualRefreshing ? "size-5 spinning" : "size-5"} />
-                </IconButton>
-
-                <Button
-                  variant="primary"
-                  icon={<PlusIcon className="size-4" />}
-                  onClick={openCreate}
-                >
-                  Create VM
-                </Button>
-              </>
+            {view !== "images" ? (
+              <IconButton
+                label="Refresh sandboxes"
+                onClick={() => void handleRefresh()}
+                disabled={manualRefreshing}
+                className="text-[var(--app-muted)] hover:bg-[var(--app-selected)] hover:text-[var(--app-text)]"
+              >
+                <RefreshIcon className={manualRefreshing ? "size-4 spinning" : "size-4"} />
+              </IconButton>
             ) : null}
+
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--app-border)] bg-[var(--app-panel)] px-2.5 text-[12px] font-medium text-[var(--app-text)] transition-colors hover:border-[var(--app-accent)]"
+            >
+              <PlusIcon className="size-3.5" />
+              Create VM
+            </button>
+            <span className="hidden size-8 place-items-center rounded-md border border-[var(--app-border)] text-[var(--app-muted)] sm:grid">
+              <CloudIcon className="size-3.5" />
+            </span>
           </div>
         </header>
 
-        <main className="flex-1 space-y-6 p-4 sm:p-6 lg:p-8">
-          {view === "images" ? (
-            <ImagesPage
-              autoOpenPull={openPullOnImages}
-              onAutoOpenConsumed={() => setOpenPullOnImages(false)}
-              onCreateVm={createFromImage}
+        {view === "sandbox" && selectedSandbox !== null ? (
+          <main className="min-h-0 flex-1">
+            <SandboxChat
+              sandbox={selectedSandbox}
+              images={images}
+              onNewVm={openCreate}
+              onTerminal={() => openTerminal(selectedSandbox)}
+              onLogs={() => openLogs(selectedSandbox)}
             />
-          ) : (
-            <>
-              <section id="overview" aria-label="Overview">
-                <SummaryCards sandboxes={sandboxes} loading={sandboxesQuery.isPending} />
-              </section>
-
-              <section
-                id="sandboxes"
-                aria-label="Sandboxes"
-                className="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-4 sm:px-6 dark:border-gray-800">
-                  <div>
-                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                      All sandboxes
-                    </h2>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                      {sandboxes.length} VM{sandboxes.length === 1 ? "" : "s"} · Updates every 3s ·
-                      stats every 2s
-                    </p>
-                  </div>
-                  <span
-                    className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"
-                    title={formatDateTime(lastUpdated)}
-                  >
-                    <ClockIcon className="size-3.5" /> Last updated {lastUpdatedLabel}
-                  </span>
-                </div>
-
-                <VmTable
-                  sandboxes={sandboxes}
-                  images={images}
-                  loading={sandboxesQuery.isPending || manualRefreshing}
-                  error={listError}
-                  pendingAction={pendingAction}
-                  onCreate={openCreate}
-                  onRetry={() => void handleRefresh()}
-                  onDetails={openDetails}
-                  onAction={(kind, sandbox) => void handleAction(kind, sandbox)}
-                  onExec={openTerminal}
-                  onLogs={openLogs}
+          </main>
+        ) : (
+          <main className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-[1180px] space-y-6 p-4 sm:p-6 lg:p-8">
+              {view === "images" ? (
+                <ImagesPage
+                  autoOpenPull={openPullOnImages}
+                  onAutoOpenConsumed={() => setOpenPullOnImages(false)}
+                  onCreateVm={createFromImage}
                 />
-              </section>
-            </>
-          )}
-        </main>
+              ) : (
+                <>
+                  <section id="overview" aria-label="Overview">
+                    <SummaryCards sandboxes={sandboxes} loading={sandboxesQuery.isPending} />
+                  </section>
+
+                  <section
+                    id="sandboxes"
+                    aria-label="Sandboxes"
+                    className="overflow-hidden rounded-xl border border-[var(--app-border)] bg-[var(--app-panel)]"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-border)] px-5 py-3.5">
+                      <div>
+                        <h2 className="text-[13px] font-semibold text-[var(--app-text)]">
+                          All sandboxes
+                        </h2>
+                        <p className="mt-0.5 text-[11px] text-[var(--app-muted)]">
+                          {sandboxes.length} VM{sandboxes.length === 1 ? "" : "s"} · click a sandbox
+                          in the sidebar to inspect it
+                        </p>
+                      </div>
+                      <span
+                        className="inline-flex items-center gap-1.5 text-[11px] text-[var(--app-muted)]"
+                        title={formatDateTime(lastUpdated)}
+                      >
+                        <ClockIcon className="size-3.5" /> {lastUpdatedLabel}
+                      </span>
+                    </div>
+
+                    <VmTable
+                      sandboxes={sandboxes}
+                      images={images}
+                      loading={sandboxesQuery.isPending || manualRefreshing}
+                      error={listError}
+                      pendingAction={pendingAction}
+                      onCreate={openCreate}
+                      onRetry={() => void handleRefresh()}
+                      onDetails={openDetails}
+                      onAction={(kind, sandbox) => void handleAction(kind, sandbox)}
+                      onExec={openTerminal}
+                      onLogs={openLogs}
+                    />
+                  </section>
+                </>
+              )}
+            </div>
+          </main>
+        )}
       </div>
 
       {createOpen ? (
