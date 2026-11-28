@@ -4,7 +4,6 @@ import {
   CircleStackIcon,
   MagnifyingGlassIcon,
   PlusIcon,
-  ServerStackIcon,
   Squares2X2Icon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -217,20 +216,6 @@ export function AppSidebar({
                 >
                   {sandboxes.length}
                 </span>
-              </a>
-            </li>
-            <li>
-              <a
-                href="#sandboxes"
-                onClick={(event) => {
-                  event.preventDefault();
-                  onNavigate("sandboxes");
-                  onClose();
-                }}
-                className={NAV_LINK}
-              >
-                <ServerStackIcon className="size-4 shrink-0" aria-hidden="true" />
-                Sandboxes
               </a>
             </li>
             <li>

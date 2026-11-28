@@ -215,6 +215,5 @@ describe("DashboardPage integration", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("navigation", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sandboxes" })).toBeInTheDocument();
   });
 });
